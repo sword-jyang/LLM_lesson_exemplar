@@ -85,8 +85,8 @@ The harmonizer can download directly from ArcGIS ImageServer endpoints:
 ```python
 DATASETS = [
     DatasetSpec(
-        name="wildfire_hazard",
-        url="https://imagery.geoplatform.gov/iipp/rest/services/Fire_Aviation/USFS_EDW_RMRS_WildfireHazardPotentialContinuous/ImageServer",
+        name="fbfm40_fuel_models",
+        url="https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip",
         data_type="raster",
     ),
 ]
@@ -99,10 +99,11 @@ After running, the output directory contains:
 ```
 output/
 └── colorado_harmonized_output/
-    ├── harmonized_wildfire_hazard.tif
+    ├── harmonized_fbfm40_fuel_models.tif
     ├── harmonized_mtbs_burned_areas.tif
     ├── harmonized_building_footprints.tif
-    └── harmonized_visualization.png
+    ├── harmonized_visualization.png
+    └── harmonized_visualization.html
 ```
 
 All harmonized rasters share:

@@ -48,19 +48,19 @@ python examples/colorado_harmonization.py
 
 This repository includes a worked example that harmonizes:
 
-* wildfire hazard potential (raster)
-* MTBS burned area boundaries (vector)
-* Microsoft building footprints (vector)
+* **FBFM40 Fire Behavior Fuel Models** (raster) - Landfire 2024 Scott and Burgan Fire Behavior Fuel Models (40 classes)
+* **MTBS burned area boundaries** (vector, rasterized)
+* **Microsoft building footprints** (vector, rasterized)
 
 All datasets are harmonized to:
 
 * CRS: EPSG:4326
 * Extent: Colorado
-* Common resolution
+* Common resolution (~270m)
 
 Goal:
 
-> Identify where wildfire risk overlaps with past fires and human infrastructure.
+> Visualize fire behavior fuel models alongside past burned areas and human infrastructure to understand fire risk patterns.
 
 See:
 

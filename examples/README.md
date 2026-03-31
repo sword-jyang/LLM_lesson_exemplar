@@ -12,9 +12,9 @@ This example shows how to harmonize multiple datasets for Colorado using a commo
 
 It demonstrates a workflow using:
 
-* wildfire hazard potential
-* MTBS burned area boundaries
-* Microsoft building footprints
+* **FBFM40 Fire Behavior Fuel Models** (raster) - Landfire 2024 Scott and Burgan Fire Behavior Fuel Models (40 classes)
+* **MTBS burned area boundaries** (vector, rasterized)
+* **Microsoft building footprints** (vector, rasterized)
 
 The example:
 
