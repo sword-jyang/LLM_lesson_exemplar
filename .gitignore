@@ -1,6 +1,11 @@
 # Output directories
 output/
 
+# But track non-TIFF files in example outputs
+!output/colorado_harmonized_output/
+output/colorado_harmonized_output/*.tif
+output/colorado_harmonized_output/*.tiff
+
 # History files
 .Rhistory
 .Rapp.history
