@@ -883,31 +883,39 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
             masked_data = np.ma.masked_equal(data, 0)
             
             if is_categorical and "fbfm" in name.lower():
+                import src.geospatial_harmonizer as _self
+                labels_map = _self.DISCOVERED_LABELS or {}
+                # Only use categories actually present in the data
+                present_cats = sorted([int(v) for v in unique_vals.tolist()])
                 # For fuel models: check if we have a custom color map
                 if "color_map" in style and style["color_map"]:
-                    # Use custom color map from source data
                     color_map = style["color_map"]
-                    # Create a ListedColormap from the custom colors
-                    categories = sorted(color_map.keys())
-                    colors = [(color_map[cat][0]/255, color_map[cat][1]/255, color_map[cat][2]/255) for cat in categories]
+                    colors = []
+                    for cat in present_cats:
+                        if cat in color_map:
+                            colors.append((color_map[cat][0]/255, color_map[cat][1]/255, color_map[cat][2]/255))
+                        else:
+                            colors.append((0.5, 0.5, 0.5))
                     cmap = ListedColormap(colors)
-                    # Create boundaries for discrete colorbar
-                    color_bounds = [cat - 0.5 for cat in categories] + [categories[-1] + 0.5]
+                    color_bounds = [c - 0.5 for c in present_cats] + [present_cats[-1] + 0.5]
                     norm = BoundaryNorm(color_bounds, cmap.N)
                     im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
-                    tick_step = max(1, len(unique_vals) // 15)
-                    cbar = plt.colorbar(im, ax=ax, shrink=0.8, ticks=unique_vals[::tick_step], orientation='vertical', pad=0.02)
-                    cbar.ax.tick_params(labelsize=6)
                 else:
                     # Fallback to default colormap
-                    n_colors = len(unique_vals)
+                    n_colors = len(present_cats)
                     cmap = cm.get_cmap("nipy_spectral", n_colors)
-                    bounds = np.linspace(vmin - 0.5, vmax + 0.5, n_colors + 1)
-                    norm = BoundaryNorm(bounds, cmap.N)
+                    color_bounds = [c - 0.5 for c in present_cats] + [present_cats[-1] + 0.5]
+                    norm = BoundaryNorm(color_bounds, cmap.N)
                     im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
-                    tick_step = max(1, len(unique_vals) // 15)
-                    cbar = plt.colorbar(im, ax=ax, shrink=0.8, ticks=unique_vals[::tick_step], orientation='vertical', pad=0.02)
-                    cbar.ax.tick_params(labelsize=6)
+                # Horizontal colorbar with evenly-spaced ticks and short names
+                max_ticks = 20
+                tick_step = max(1, len(present_cats) // max_ticks)
+                ticks = present_cats[::tick_step]
+                cbar = plt.colorbar(im, ax=ax, ticks=ticks, orientation='horizontal', pad=0.04, fraction=0.046)
+                cbar.ax.set_xticklabels(
+                    [labels_map.get(t, str(t)) for t in ticks],
+                    rotation=45, ha='right', fontsize=6
+                )
             else:
                 cmap = cm.get_cmap(style["colormap"])
                 # Mask out zeros for better visualization
@@ -1142,9 +1150,9 @@ def _create_interactive_visualization_impl(
                 # This preserves full spatial coverage without sampling or simplification.
                 _log(f"  Rasterizing large vector ({file_size_mb:.0f} MB) for HTML display", verbose)
                 bounds = (xmin, ymin, xmax, ymax)
-                # Build a web-friendly grid (~800px on the long side)
+                # Build a higher-resolution grid so small features (e.g. buildings) are visible
                 aspect = (xmax - xmin) / (ymax - ymin)
-                grid_h = 600
+                grid_h = 1500
                 grid_w = max(1, int(grid_h * aspect))
                 transform = from_bounds(xmin, ymin, xmax, ymax, grid_w, grid_h)
                 presence = rasterize(
@@ -1301,7 +1309,8 @@ def _create_interactive_visualization_impl(
     # Add a legend as a custom HTML element
     legend_html = '''
     <div style="position: fixed;
-                bottom: 50px; left: 50px; width: 180px; height: auto;
+                bottom: 50px; left: 50px; width: 210px;
+                max-height: calc(100vh - 120px); overflow-y: auto;
                 border:2px solid grey; z-index:9999; font-size:12px;
                 background-color:white; padding: 10px;
                 border-radius: 5px;
@@ -1331,7 +1340,7 @@ def _create_interactive_visualization_impl(
                 labels_map = _self.DISCOVERED_LABELS or {}
                 unique_present = sorted(np.unique(data[data > 0]).tolist())
                 legend_html += f'<div style="margin:4px 0 2px;font-weight:bold;">{name.replace("_", " ").title()}</div>'
-                legend_html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 6px;max-height:160px;overflow-y:auto;font-size:10px;">'
+                legend_html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 6px;font-size:10px;">'
                 for v in unique_present:
                     label = labels_map.get(v, str(v))
                     if v in color_map:
