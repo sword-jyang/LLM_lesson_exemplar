@@ -43,20 +43,19 @@ DATASETS = [
         name="fbfm40_fuel_models",
         url="https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip",
         data_type="raster",
+        labels_url="https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv",
     ),
     DatasetSpec(
         name="mtbs_burned_areas",
         url="https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip",
         data_type="vector",
-        rasterize=True,
-        burn_value=1,
+        rasterize=False,
     ),
     DatasetSpec(
         name="building_footprints",
         url="https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Colorado.geojson.zip",
         data_type="vector",
-        rasterize=True,
-        burn_value=1,
+        rasterize=False,
     ),
 ]
 

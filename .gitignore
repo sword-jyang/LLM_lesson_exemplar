@@ -1,10 +1,9 @@
 # Output directories
 output/
 
-# But track non-TIFF files in example outputs
-!output/colorado_harmonized_output/
-output/colorado_harmonized_output/*.tif
-output/colorado_harmonized_output/*.tiff
+# Re-add specific non-TIFF files in example outputs (use -f to force add when running git)
+# These files can be added with: git add -f output/colorado_harmonized_output/harmonized_visualization.png
+# And: git add -f output/colorado_harmonized_output/harmonized_visualization.html
 
 # History files
 .Rhistory

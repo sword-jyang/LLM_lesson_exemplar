@@ -46,6 +46,11 @@ except ImportError:
 
 BBox = tuple[float, float, float, float]
 
+# Global color map discovered from source data (used by visualization functions)
+DISCOVERED_COLOR_MAP: dict | None = None
+# Global labels map: integer value -> short label string (e.g. 101 -> "GR1")
+DISCOVERED_LABELS: dict | None = None
+
 
 @dataclass
 class DatasetSpec:
@@ -58,6 +63,7 @@ class DatasetSpec:
     wcs_layer: str = None
     is_wms: bool = False
     wms_layer: str = None
+    labels_url: str | None = None  # URL to a CSV with VALUE,LABEL columns for legend labels
 
 
 @dataclass
@@ -419,6 +425,198 @@ def discover_dataset_file(dataset_dir: Path, data_type: str) -> Path:
         raise FileNotFoundError(f"No {data_type} dataset found in {dataset_dir}")
 
     return candidates[0]
+
+
+# Known color table URLs for common datasets
+COLOR_TABLE_URLS = {
+    "fbfm40": "https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv",
+    "fbfm13": "https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM13.csv",
+    "evc": "https://landfire.gov/sites/default/files/CSV/2024/LF2024_EVC.csv",
+    "evh": "https://landfire.gov/sites/default/files/CSV/2024/LF2024_EVH.csv",
+}
+
+
+def discover_color_map(dataset_dir: Path, dataset_name: str = "") -> dict | None:
+    """Discover and parse color map file from the dataset directory.
+    
+    Looks for common color map file formats:
+    - .clr (ESRI color map files)
+    - .txt (text-based color maps)
+    - .csv (comma-separated color tables like Landfire)
+    - .qml (QGIS style files)
+    
+    Also tries to download from known URLs for Landfire datasets.
+    
+    Args:
+        dataset_dir: Directory to search for color map files
+        dataset_name: Optional name of the dataset to help find color table URLs
+        
+    Returns:
+        Dict mapping category values to RGB colors, or None if not found
+    """
+    # Look for .clr files (ESRI color map format)
+    clr_files = list(dataset_dir.rglob("*.clr"))
+    if clr_files:
+        return _parse_esri_color_map(clr_files[0])
+    
+    # Look for .txt files that might be color maps
+    txt_files = list(dataset_dir.rglob("*.txt"))
+    for txt_file in txt_files:
+        # Check if it looks like a color map file
+        try:
+            with open(txt_file, 'r') as f:
+                first_lines = [f.readline() for _ in range(5)]
+            # ESRI color maps often have category values as first column
+            if any(line.strip().split()[:3] for line in first_lines if line.strip()):
+                result = _parse_text_color_map(txt_file)
+                if result:
+                    return result
+        except Exception:
+            continue
+    
+    # Look for CSV files that might be color tables (e.g., Landfire)
+    csv_files = list(dataset_dir.rglob("*.csv"))
+    for csv_file in csv_files:
+        result = _parse_csv_color_map(csv_file)
+        if result:
+            return result
+    
+    # Try to download from known URLs based on dataset name
+    name_lower = dataset_name.lower()
+    for key, url in COLOR_TABLE_URLS.items():
+        if key in name_lower:
+            _log(f"Attempting to download color table from {url}", True)
+            try:
+                # Download to a temp file
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                    tmp_path = tmp.name
+                    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(request) as response:
+                        shutil.copyfileobj(response, tmp)
+                    result = _parse_csv_color_map(Path(tmp_path))
+                    Path(tmp_path).unlink()
+                    if result:
+                        return result
+            except Exception as e:
+                _log(f"Could not download color table: {e}", True)
+                continue
+    
+    return None
+
+
+def _parse_esri_color_map(clr_path: Path) -> dict:
+    """Parse ESRI .clr color map file.
+    
+    Format: category R G B
+    """
+    color_map = {}
+    try:
+        with open(clr_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split()
+                if len(parts) >= 4:
+                    try:
+                        category = int(parts[0])
+                        r = int(parts[1])
+                        g = int(parts[2])
+                        b = int(parts[3])
+                        color_map[category] = (r, g, b)
+                    except ValueError:
+                        continue
+    except Exception as e:
+        print(f"Warning: Could not parse color map {clr_path}: {e}")
+        return None
+    
+    return color_map if color_map else None
+
+
+def _parse_text_color_map(txt_path: Path) -> dict | None:
+    """Parse text-based color map file.
+    
+    Attempts to parse common formats.
+    """
+    color_map = {}
+    try:
+        with open(txt_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split()
+                if len(parts) >= 4:
+                    try:
+                        # Try to parse as category R G B
+                        category = int(parts[0])
+                        r = int(parts[1])
+                        g = int(parts[2])
+                        b = int(parts[3])
+                        color_map[category] = (r, g, b)
+                    except ValueError:
+                        continue
+    except Exception:
+        return None
+    
+    return color_map if color_map else None
+
+
+def _parse_csv_color_map(csv_path: Path) -> dict | None:
+    """Parse CSV-based color map file (e.g., Landfire color tables).
+    
+    Expected format: VALUE,FBFM40,R,G,B,RED,GREEN,BLUE
+    or similar with VALUE and R, G, B columns.
+    """
+    color_map = {}
+    try:
+        import csv
+        with open(csv_path, 'r') as f:
+            reader = csv.reader(f)
+            header = None
+            for row in reader:
+                if not row:
+                    continue
+                # First non-empty row is the header
+                if header is None:
+                    header = [col.strip().upper() for col in row]
+                    # Look for VALUE and R, G, B columns
+                    if 'VALUE' not in header or 'R' not in header:
+                        return None
+                    continue
+                
+                # Skip rows that don't have enough columns
+                if len(row) < len(header):
+                    continue
+                
+                try:
+                    # Find column indices
+                    value_idx = header.index('VALUE')
+                    r_idx = header.index('R')
+                    g_idx = header.index('G')
+                    b_idx = header.index('B')
+                    
+                    # Parse values
+                    value = int(row[value_idx])
+                    r = int(row[r_idx])
+                    g = int(row[g_idx])
+                    b = int(row[b_idx])
+                    
+                    # Skip NoData values
+                    if value < 0 or value == -9999:
+                        continue
+                    
+                    color_map[value] = (r, g, b)
+                except (ValueError, IndexError):
+                    continue
+    except Exception as e:
+        print(f"Warning: Could not parse CSV color map {csv_path}: {e}")
+        return None
+    
+    return color_map if color_map else None
+
+
 def harmonize_raster(input_path: Path, grid: GridSpec, output_path: Path, verbose: bool = True) -> Path:
     """Harmonize raster to target grid, clipping to extent first for efficiency."""
     _log(f"Harmonizing raster: {input_path.name}", verbose)
@@ -535,6 +733,47 @@ def rasterize_vector_to_grid(
     return output_path
 
 
+def harmonize_vector(
+    input_path: Path,
+    grid: GridSpec,
+    output_path: Path,
+    verbose: bool = True,
+) -> Path:
+    """Harmonize vector to target CRS and clip to target extent.
+    
+    Args:
+        input_path: Path to input vector file
+        grid: Target grid specification
+        output_path: Path to save harmonized vector
+        verbose: Print progress messages
+        
+    Returns:
+        Path to harmonized vector file
+    """
+    _log(f"Harmonizing vector: {input_path.name}", verbose)
+    
+    gdf = gpd.read_file(input_path)
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+    
+    # Reproject to target CRS if needed
+    if str(gdf.crs) != grid.crs:
+        gdf = gdf.to_crs(grid.crs)
+    
+    # Clip to target extent
+    xmin, ymin, xmax, ymax = grid.extent
+    clip_geom = box(xmin, ymin, xmax, ymax)
+    gdf = gdf[gdf.intersects(clip_geom)].copy()
+    
+    # Save harmonized vector
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    gdf.to_file(output_path, driver="GeoJSON")
+    
+    _log(f"  Saved harmonized vector: {output_path.name} ({len(gdf)} features)", verbose)
+    
+    return output_path
+
+
 def _create_binary_mask(data: np.ndarray) -> np.ndarray:
     """Create a mask for binary data (0s and 1s), returning only 1s as visible."""
     unique_vals = np.unique(data)
@@ -543,9 +782,39 @@ def _create_binary_mask(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def create_visualization(outputs: list[tuple[str, Path]], output_path: Path, verbose: bool = True) -> Path:
+def create_visualization(outputs: list[tuple[str, Path]], output_path: Path, verbose: bool = True) -> Path | None:
     """Create a static PNG visualization with subplots for each layer."""
+    try:
+        return _create_visualization_impl(outputs, output_path, verbose)
+    except Exception as e:
+        _log(f"Error creating visualization: {e}", verbose)
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def _load_color_map_from_output_dir(output_path: Path) -> None:
+    """Load DISCOVERED_COLOR_MAP and DISCOVERED_LABELS from saved JSON files if not already set."""
+    import json
+    import src.geospatial_harmonizer as _self
+    if _self.DISCOVERED_COLOR_MAP is None:
+        for json_path in output_path.parent.glob("*_color_map.json"):
+            with open(json_path) as f:
+                color_map_json = json.load(f)
+            _self.DISCOVERED_COLOR_MAP = {int(k): tuple(v) for k, v in color_map_json.items()}
+            break
+    if _self.DISCOVERED_LABELS is None:
+        for json_path in output_path.parent.glob("*_labels.json"):
+            with open(json_path) as f:
+                labels_json = json.load(f)
+            _self.DISCOVERED_LABELS = {int(k): v for k, v in labels_json.items()}
+            break
+
+
+def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Path, verbose: bool = True) -> Path:
+    """Internal implementation of PNG visualization creation."""
     _log("Creating visualization", verbose)
+    _load_color_map_from_output_dir(output_path)
 
     n = len(outputs)
     cols = min(3, n)
@@ -555,13 +824,31 @@ def create_visualization(outputs: list[tuple[str, Path]], output_path: Path, ver
     axes = np.atleast_1d(axes).flatten()
 
     for i, (name, path) in enumerate(outputs):
+        _log(f"  Processing layer {i+1}/{len(outputs)}: {name}", verbose)
+        ax = axes[i]
+        
+        # Handle vector files
+        if path.suffix.lower() in ['.geojson', '.json', '.shp']:
+            # Get styling for vector layer
+            style = _get_vector_style(name)
+            
+            # Read vector data
+            gdf = gpd.read_file(path)
+            
+            # Plot the vector data
+            gdf.plot(ax=ax, color=style["color"], edgecolor='black',
+                    linewidth=0.5, alpha=style["fillOpacity"])
+            
+            ax.set_title(name.replace("_", " ").title())
+            ax.axis("off")
+            continue
+        
+        # Handle raster files
         with rasterio.open(path) as src:
             data = src.read(1)
         
         # Get styling for this layer
         style = _get_layer_style(name, data, i)
-        
-        ax = axes[i]
         
         if style["solid_color"] is not None:
             # Binary data - use solid color with transparency
@@ -596,15 +883,31 @@ def create_visualization(outputs: list[tuple[str, Path]], output_path: Path, ver
             masked_data = np.ma.masked_equal(data, 0)
             
             if is_categorical and "fbfm" in name.lower():
-                # For fuel models: create discrete colorbar with boundaries
-                n_colors = len(unique_vals)
-                # Create discrete colormap
-                cmap = cm.get_cmap("nipy_spectral", n_colors)
-                # Create boundaries for discrete colorbar
-                bounds = np.linspace(vmin - 0.5, vmax + 0.5, n_colors + 1)
-                norm = BoundaryNorm(bounds, cmap.N)
-                im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
-                cbar = plt.colorbar(im, ax=ax, shrink=0.6, ticks=unique_vals[::10], orientation='horizontal', pad=0.05)
+                # For fuel models: check if we have a custom color map
+                if "color_map" in style and style["color_map"]:
+                    # Use custom color map from source data
+                    color_map = style["color_map"]
+                    # Create a ListedColormap from the custom colors
+                    categories = sorted(color_map.keys())
+                    colors = [(color_map[cat][0]/255, color_map[cat][1]/255, color_map[cat][2]/255) for cat in categories]
+                    cmap = ListedColormap(colors)
+                    # Create boundaries for discrete colorbar
+                    color_bounds = [cat - 0.5 for cat in categories] + [categories[-1] + 0.5]
+                    norm = BoundaryNorm(color_bounds, cmap.N)
+                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
+                    tick_step = max(1, len(unique_vals) // 15)
+                    cbar = plt.colorbar(im, ax=ax, shrink=0.8, ticks=unique_vals[::tick_step], orientation='vertical', pad=0.02)
+                    cbar.ax.tick_params(labelsize=6)
+                else:
+                    # Fallback to default colormap
+                    n_colors = len(unique_vals)
+                    cmap = cm.get_cmap("nipy_spectral", n_colors)
+                    bounds = np.linspace(vmin - 0.5, vmax + 0.5, n_colors + 1)
+                    norm = BoundaryNorm(bounds, cmap.N)
+                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
+                    tick_step = max(1, len(unique_vals) // 15)
+                    cbar = plt.colorbar(im, ax=ax, shrink=0.8, ticks=unique_vals[::tick_step], orientation='vertical', pad=0.02)
+                    cbar.ax.tick_params(labelsize=6)
             else:
                 cmap = cm.get_cmap(style["colormap"])
                 # Mask out zeros for better visualization
@@ -682,11 +985,23 @@ def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
     else:
         # Continuous/categorical data - use distinct colormaps
         if "fbfm" in name_lower or "fuel" in name_lower:
-            # Fuel models - use a colormap that handles many categories
-            return {
-                "colormap": "nipy_spectral",  # Good for many categories
-                "solid_color": None,
-                "alpha": 0.7,
+            # Fuel models - check if we have a discovered color map from source
+            if DISCOVERED_COLOR_MAP:
+                return {
+                    "colormap": None,  # Will use custom color map
+                    "color_map": DISCOVERED_COLOR_MAP,
+                    "solid_color": None,
+                    "alpha": 0.7,
+                    "vmin": min(DISCOVERED_COLOR_MAP.keys()),
+                    "vmax": max(DISCOVERED_COLOR_MAP.keys()),
+                }
+            else:
+                # Fallback to default colormap
+                return {
+                    "colormap": "nipy_spectral",  # Good for many categories
+                    "color_map": None,
+                    "solid_color": None,
+                    "alpha": 0.7,
                 "vmin": data.min(),
                 "vmax": data.max(),
             }
@@ -710,12 +1025,45 @@ def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
             }
 
 
+def _get_vector_style(name: str) -> dict:
+    """Get color scheme and styling for a vector layer based on its name.
+    
+    Returns a dict with:
+    - color: Hex color string for the layer
+    - weight: Line weight for boundaries
+    - fillOpacity: Fill opacity for polygons
+    """
+    name_lower = name.lower()
+    
+    if "burn" in name_lower or "mtbs" in name_lower or "fire" in name_lower:
+        # Burned areas - use red
+        return {
+            "color": "#FF0000",
+            "weight": 2,
+            "fillOpacity": 0.5,
+        }
+    elif "building" in name_lower or "footprint" in name_lower:
+        # Buildings - use purple/blue
+        return {
+            "color": "#6600CC",
+            "weight": 1,
+            "fillOpacity": 0.7,
+        }
+    else:
+        # Default - use blue
+        return {
+            "color": "#3186cc",
+            "weight": 2,
+            "fillOpacity": 0.5,
+        }
+
+
 def create_interactive_visualization(
     outputs: list[tuple[str, Path]],
     output_path: Path,
     target_extent: tuple[float, float, float, float],
     verbose: bool = True
-) -> Path:
+) -> Path | None:
     """Create an interactive HTML map visualization with folium.
     
     Args:
@@ -725,14 +1073,31 @@ def create_interactive_visualization(
         verbose: Print progress messages
         
     Returns:
-        Path to the created HTML file
+        Path to the created HTML file, or None if creation failed
     """
     if not FOLIUM_AVAILABLE:
         _log("Folium not available, falling back to static visualization", verbose)
         return None
     
+    try:
+        return _create_interactive_visualization_impl(outputs, output_path, target_extent, verbose)
+    except Exception as e:
+        _log(f"Error creating interactive visualization: {e}", verbose)
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def _create_interactive_visualization_impl(
+    outputs: list[tuple[str, Path]],
+    output_path: Path,
+    target_extent: tuple[float, float, float, float],
+    verbose: bool = True
+) -> Path:
+    """Internal implementation of interactive visualization creation."""
     _log("Creating interactive HTML visualization", verbose)
-    
+    _load_color_map_from_output_dir(output_path)
+
     xmin, ymin, xmax, ymax = target_extent
     center_lat = (ymin + ymax) / 2
     center_lon = (xmin + xmax) / 2
@@ -752,111 +1117,167 @@ def create_interactive_visualization(
         max_zoom=19
     ).add_to(m)
     
-    # Add CartoDB dark matter as alternative
-    folium.TileLayer(
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        name="CartoDB Dark",
-        max_zoom=19
-    ).add_to(m)
-    
-    # Add OpenStreetMap as another alternative
-    folium.TileLayer(
-        tiles="OpenStreetMap",
-        name="OpenStreetMap",
-        max_zoom=19
-    ).add_to(m)
-    
-    # Add each layer as an image overlay
+    # Add each layer - handle raster and vector differently
     for i, (name, path) in enumerate(outputs):
-        with rasterio.open(path) as src:
-            data = src.read(1)
-            bounds = src.bounds
+        _log(f"  Processing layer {i+1}/{len(outputs)}: {name}", verbose)
+        # Check if this is a vector file (GeoJSON)
+        if path.suffix.lower() == '.geojson' or path.suffix.lower() == '.json':
+            # Handle vector data as GeoJSON layer
+            _log(f"  Adding vector layer: {name}", verbose)
             
             # Get styling for this layer
-            style = _get_layer_style(name, data, i)
+            style = _get_vector_style(name)
             
-            # Create a temporary PNG for the overlay
-            fig, ax = plt.subplots(figsize=(10, 10), dpi=150)
-            
-            if style["solid_color"] is not None:
-                # Binary data - use solid color with transparency
-                # Show color where data == 1, transparent where data == 0
-                rgba_image = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.float32)
-                r, g, b, a = style["solid_color"]
-                rgba_image[:, :, 0] = r
-                rgba_image[:, :, 1] = g
-                rgba_image[:, :, 2] = b
-                # Alpha: 1 where data == 1, 0 where data == 0
-                rgba_image[:, :, 3] = (data == 1).astype(float) * style["alpha"]
-                
-                ax.imshow(rgba_image, extent=(bounds.left, bounds.right, bounds.bottom, bounds.top),
-                         origin='upper')
+            # Read the GeoJSON
+            gdf = gpd.read_file(path)
+
+            # Convert datetime columns to strings to avoid JSON serialization issues
+            for col in gdf.columns:
+                if hasattr(gdf[col].dtype, 'kind') and gdf[col].dtype.kind == 'M':
+                    gdf[col] = gdf[col].astype(str)
+
+            file_size_mb = path.stat().st_size / 1e6
+            if file_size_mb > 10:
+                # Large vector: rasterize to a presence grid and show as an image overlay.
+                # This preserves full spatial coverage without sampling or simplification.
+                _log(f"  Rasterizing large vector ({file_size_mb:.0f} MB) for HTML display", verbose)
+                bounds = (xmin, ymin, xmax, ymax)
+                # Build a web-friendly grid (~800px on the long side)
+                aspect = (xmax - xmin) / (ymax - ymin)
+                grid_h = 600
+                grid_w = max(1, int(grid_h * aspect))
+                transform = from_bounds(xmin, ymin, xmax, ymax, grid_w, grid_h)
+                presence = rasterize(
+                    [(geom, 1) for geom in gdf.geometry if geom is not None],
+                    out_shape=(grid_h, grid_w),
+                    transform=transform,
+                    fill=0,
+                    dtype=np.uint8,
+                )
+                from PIL import Image as PILImage
+                hex_c = style["color"].lstrip("#")
+                r_val, g_val, b_val = int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
+                rgba = np.zeros((grid_h, grid_w, 4), dtype=np.uint8)
+                mask_px = presence == 1
+                rgba[mask_px, 0] = r_val
+                rgba[mask_px, 1] = g_val
+                rgba[mask_px, 2] = b_val
+                rgba[mask_px, 3] = int(style["fillOpacity"] * 255)
+                img = PILImage.fromarray(rgba, mode='RGBA')
+                buf = io.BytesIO()
+                img.save(buf, format='PNG', optimize=True)
+                buf.seek(0)
+                img_base64 = base64.b64encode(buf.getvalue()).decode('ascii')
+                folium.raster_layers.ImageOverlay(
+                    image=f"data:image/png;base64,{img_base64}",
+                    bounds=[[ymin, xmin], [ymax, xmax]],
+                    name=name.replace("_", " ").title(),
+                    opacity=style["fillOpacity"],
+                    interactive=False,
+                    zindex=i + 10,
+                ).add_to(m)
             else:
-                # Continuous/categorical data - use colormap
-                import matplotlib.cm as cm
-                from matplotlib.colors import BoundaryNorm
-                
-                vmin = style["vmin"] if style["vmin"] is not None else np.nanmin(data)
-                vmax = style["vmax"] if style["vmax"] is not None else np.nanmax(data)
-                
-                # Check if this is categorical/discrete data (like fuel models)
-                unique_vals = np.unique(data[data > 0])
-                is_categorical = len(unique_vals) > 20  # Many unique values suggests categorical
-                
-                # Mask out zeros for better visualization
-                masked_data = np.ma.masked_equal(data, 0)
-                
-                if is_categorical and "fbfm" in name.lower():
-                    # For fuel models: create discrete colormap
-                    n_colors = len(unique_vals)
-                    cmap = cm.get_cmap("nipy_spectral", n_colors)
-                    color_bounds = np.linspace(vmin - 0.5, vmax + 0.5, n_colors + 1)
-                    norm = BoundaryNorm(color_bounds, cmap.N)
-                    im = ax.imshow(masked_data,
-                                  extent=(bounds.left, bounds.right, bounds.bottom, bounds.top),
-                                  origin='upper',
-                                  cmap=cmap,
-                                  norm=norm,
-                                  alpha=style["alpha"])
+                # Small vector: add as interactive GeoJSON layer
+                geojson_str = gdf.to_json()
+                folium.GeoJson(
+                    geojson_str,
+                    name=name.replace("_", " ").title(),
+                    style_function=lambda x, color=style["color"]: {
+                        'fillColor': color,
+                        'color': color,
+                        'weight': style["weight"],
+                        'fillOpacity': style["fillOpacity"],
+                    },
+                    tooltip=name.replace("_", " ").title(),
+                ).add_to(m)
+        else:
+            # Handle raster data as image overlay
+            _log(f"  Adding raster layer: {name}", verbose)
+            with rasterio.open(path) as src:
+                data = src.read(1)
+                # Use target extent for bounds to ensure full coverage
+                bounds = (xmin, ymin, xmax, ymax)
+
+                # Get styling for this layer
+                style = _get_layer_style(name, data, i)
+
+                # Build RGBA array directly with PIL — much smaller than matplotlib figure
+                from PIL import Image as PILImage
+                h, w = data.shape
+                rgba = np.zeros((h, w, 4), dtype=np.uint8)
+                alpha_val = int(style["alpha"] * 255)
+
+                if style["solid_color"] is not None:
+                    r, g, b, _ = style["solid_color"]
+                    mask_px = data == 1
+                    rgba[mask_px, 0] = int(r * 255)
+                    rgba[mask_px, 1] = int(g * 255)
+                    rgba[mask_px, 2] = int(b * 255)
+                    rgba[mask_px, 3] = alpha_val
                 else:
-                    cmap = cm.get_cmap(style["colormap"])
-                    im = ax.imshow(masked_data,
-                                  extent=(bounds.left, bounds.right, bounds.bottom, bounds.top),
-                                  origin='upper',
-                              alpha=style["alpha"],
-                              cmap=cmap,
-                              vmin=vmin,
-                              vmax=vmax)
-                # Don't add colorbar here - it makes the image too large for overlay
-                # We'll add an external legend to the HTML instead
-            
-            ax.set_xlim(bounds.left, bounds.right)
-            ax.set_ylim(bounds.bottom, bounds.top)
-            # Don't set title here - it will overlap in the HTML overlay
-            # The layer name in folium.LayerControl serves as the title
-            ax.axis("off")
-            
-            # Save to buffer
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', transparent=True)
-            buf.seek(0)
-            plt.close()
-            
-            # Encode to base64 - remove any whitespace/newlines
-            img_base64 = base64.b64encode(buf.getvalue()).decode('ascii')
-            
-            # Create image overlay with proper lat/lon bounds
-            # Use branca colormap for proper rendering
-            overlay = folium.raster_layers.ImageOverlay(
-                image=f"data:image/png;base64,{img_base64}",
-                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                name=name.replace("_", " ").title(),
-                opacity=style["alpha"],
-                interactive=True,
-                zindex=i + 10  # Above base maps
-            )
-            overlay.add_to(m)
+                    import matplotlib.cm as cm
+                    from matplotlib.colors import BoundaryNorm, ListedColormap, Normalize
+
+                    vmin = style["vmin"] if style["vmin"] is not None else float(np.nanmin(data[data > 0]))
+                    vmax = style["vmax"] if style["vmax"] is not None else float(np.nanmax(data))
+                    unique_vals = np.unique(data[data > 0])
+                    is_categorical = len(unique_vals) > 20
+
+                    if is_categorical and "fbfm" in name.lower() and style.get("color_map"):
+                        color_map = style["color_map"]
+                        for cat_val, color in color_map.items():
+                            px = data == cat_val
+                            rgba[px, 0] = color[0]
+                            rgba[px, 1] = color[1]
+                            rgba[px, 2] = color[2]
+                            rgba[px, 3] = alpha_val
+                    else:
+                        if is_categorical and "fbfm" in name.lower():
+                            n_colors = len(unique_vals)
+                            cmap = cm.get_cmap("nipy_spectral", n_colors)
+                            norm = BoundaryNorm(
+                                np.linspace(vmin - 0.5, vmax + 0.5, n_colors + 1), n_colors
+                            )
+                        else:
+                            cmap = cm.get_cmap(style["colormap"])
+                            norm = Normalize(vmin=vmin, vmax=vmax)
+
+                        valid = data > 0
+                        normed = norm(data[valid].astype(float))
+                        colored = cmap(normed)  # (N, 4) float 0-1
+                        rgba[valid, 0] = (colored[:, 0] * 255).astype(np.uint8)
+                        rgba[valid, 1] = (colored[:, 1] * 255).astype(np.uint8)
+                        rgba[valid, 2] = (colored[:, 2] * 255).astype(np.uint8)
+                        rgba[valid, 3] = alpha_val
+
+                # Downsample to max 800px on the long side for web display
+                max_dim = 800
+                if max(h, w) > max_dim:
+                    scale = max_dim / max(h, w)
+                    new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+                    img = PILImage.fromarray(rgba, mode='RGBA').resize(
+                        (new_w, new_h), PILImage.LANCZOS
+                    )
+                else:
+                    img = PILImage.fromarray(rgba, mode='RGBA')
+
+                buf = io.BytesIO()
+                img.save(buf, format='PNG', optimize=True)
+                buf.seek(0)
+
+                # Encode to base64
+                img_base64 = base64.b64encode(buf.getvalue()).decode('ascii')
+                
+                # Create image overlay with proper lat/lon bounds using target extent
+                overlay = folium.raster_layers.ImageOverlay(
+                    image=f"data:image/png;base64,{img_base64}",
+                    bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+                    name=name.replace("_", " ").title(),
+                    opacity=style["alpha"],
+                    interactive=True,
+                    zindex=i + 10  # Above base maps
+                )
+                overlay.add_to(m)
     
     # Add a rectangle to show the target extent
     folium.Rectangle(
@@ -889,18 +1310,41 @@ def create_interactive_visualization(
     '''
     
     for i, (name, path) in enumerate(outputs):
-        with rasterio.open(path) as src:
-            data = src.read(1)
-        style = _get_layer_style(name, data, i)
-        
-        if style["solid_color"] is not None:
-            # Binary data - show solid color
-            r, g, b, a = style["solid_color"]
-            hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
-            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{hex_color};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {name.replace("_", " ").title()}</div>'
+        # Check if this is a vector file
+        if path.suffix.lower() == '.geojson' or path.suffix.lower() == '.json':
+            style = _get_vector_style(name)
+            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{style["color"]};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {name.replace("_", " ").title()}</div>'
         else:
-            # Continuous/categorical - show colormap name on same line as gradient
-            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><span style="margin-right:5px;white-space:nowrap;">{name.replace("_", " ").title()}</span><i style="background:linear-gradient(to right, blue, cyan, green, yellow, red);width:100px;height:12px;display:inline-block;flex-grow:1;"></i></div>'
+            with rasterio.open(path) as src:
+                data = src.read(1)
+            style = _get_layer_style(name, data, i)
+            
+            if style["solid_color"] is not None:
+                # Binary data - show solid color
+                r, g, b, a = style["solid_color"]
+                hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
+                legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{hex_color};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {name.replace("_", " ").title()}</div>'
+            else:
+                # Categorical: show a compact labeled swatch list for values present in this layer
+                import src.geospatial_harmonizer as _self
+                color_map = style.get("color_map") or {}
+                labels_map = _self.DISCOVERED_LABELS or {}
+                unique_present = sorted(np.unique(data[data > 0]).tolist())
+                legend_html += f'<div style="margin:4px 0 2px;font-weight:bold;">{name.replace("_", " ").title()}</div>'
+                legend_html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 6px;max-height:160px;overflow-y:auto;font-size:10px;">'
+                for v in unique_present:
+                    label = labels_map.get(v, str(v))
+                    if v in color_map:
+                        r_c, g_c, b_c = color_map[v][0], color_map[v][1], color_map[v][2]
+                        bg = f"rgb({r_c},{g_c},{b_c})"
+                    else:
+                        bg = "#aaa"
+                    legend_html += (
+                        f'<div style="display:flex;align-items:center;gap:3px;white-space:nowrap;">'
+                        f'<i style="background:{bg};width:10px;height:10px;display:inline-block;flex-shrink:0;"></i>'
+                        f'{label}</div>'
+                    )
+                legend_html += '</div>'
     
     legend_html += '</div>'
     
@@ -926,6 +1370,9 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
     workflow.output_dir.mkdir(parents=True, exist_ok=True)
     output_files: list[Path] = []
     viz_inputs: list[tuple[str, Path]] = []
+    
+    # Global color map discovered from source data
+    global_color_map: dict | None = None
 
     with TemporaryDirectory(prefix=f"{workflow.name}_") as tmp:
         tmp_dir = Path(tmp)
@@ -935,11 +1382,37 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
             dataset_dir.mkdir(parents=True, exist_ok=True)
 
             # Check if output already exists BEFORE downloading
-            output_path = workflow.output_dir / f"harmonized_{dataset.name}.tif"
+            if dataset.data_type == "vector" and not dataset.rasterize:
+                output_path = workflow.output_dir / f"harmonized_{dataset.name}.geojson"
+            else:
+                output_path = workflow.output_dir / f"harmonized_{dataset.name}.tif"
+            
             if output_path.exists():
                 _log(f"Using existing harmonized file: {output_path.name}", workflow.verbose)
                 output_files.append(output_path)
                 viz_inputs.append((dataset.name, output_path))
+                # Try to load color map from saved file if not already discovered
+                if global_color_map is None and dataset.data_type == "raster":
+                    color_map_path = workflow.output_dir / f"{dataset.name}_color_map.json"
+                    if color_map_path.exists():
+                        import json
+                        with open(color_map_path) as f:
+                            color_map_json = json.load(f)
+                            # Convert string keys back to int and lists to tuples
+                            color_map = {int(k): tuple(v) for k, v in color_map_json.items()}
+                            global_color_map = color_map
+                            # Update module-level global for visualization functions
+                            import src.geospatial_harmonizer
+                            src.geospatial_harmonizer.DISCOVERED_COLOR_MAP = color_map
+                            _log(f"Loaded color map with {len(color_map)} categories from file", workflow.verbose)
+                # Try to load labels from saved file
+                labels_path = workflow.output_dir / f"{dataset.name}_labels.json"
+                if labels_path.exists():
+                    import json, src.geospatial_harmonizer
+                    with open(labels_path) as f:
+                        labels_json = json.load(f)
+                    src.geospatial_harmonizer.DISCOVERED_LABELS = {int(k): v for k, v in labels_json.items()}
+                    _log(f"Loaded {len(labels_json)} labels from file", workflow.verbose)
                 continue
 
             # Check if URL is a WMS endpoint
@@ -986,8 +1459,58 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
                 downloaded = download_file(dataset.url, dataset_dir, workflow.verbose)
                 extracted_dir = extract_archive_if_needed(downloaded, dataset_dir, workflow.verbose)
                 source_file = discover_dataset_file(extracted_dir, dataset.data_type)
+                
+                # Try to discover color map from extracted data
+                if global_color_map is None and dataset.data_type == "raster":
+                    color_map = discover_color_map(extracted_dir, dataset.name)
+                    if color_map:
+                        global_color_map = color_map
+                        # Update module-level global for visualization functions
+                        import src.geospatial_harmonizer
+                        src.geospatial_harmonizer.DISCOVERED_COLOR_MAP = color_map
+                        _log(f"Discovered color map with {len(color_map)} categories", workflow.verbose)
+                        # Save color map to output directory for reference
+                        color_map_path = workflow.output_dir / f"{dataset.name}_color_map.json"
+                        # Rename old color_map.json if it exists
+                        old_color_map_path = workflow.output_dir / "color_map.json"
+                        if old_color_map_path.exists():
+                            old_color_map_path.rename(color_map_path)
+                        import json
+                        # Convert tuples to lists for JSON serialization
+                        color_map_json = {str(k): list(v) for k, v in color_map.items()}
+                        with open(color_map_path, 'w') as f:
+                            json.dump(color_map_json, f)
+                        _log(f"Saved color map to {color_map_path.name}", workflow.verbose)
 
-            output_path = workflow.output_dir / f"harmonized_{dataset.name}.tif"
+            # Download and cache labels CSV if provided
+            if dataset.labels_url:
+                import json as _json
+                labels_path = workflow.output_dir / f"{dataset.name}_labels.json"
+                if not labels_path.exists():
+                    _log(f"Downloading labels from {dataset.labels_url}", workflow.verbose)
+                    try:
+                        with urllib.request.urlopen(dataset.labels_url) as resp:
+                            csv_text = resp.read().decode("utf-8")
+                        labels: dict[str, str] = {}
+                        for line in csv_text.splitlines():
+                            parts = line.strip().split(",")
+                            if len(parts) >= 2:
+                                try:
+                                    int(parts[0])  # skip non-numeric rows (header / nodata)
+                                    labels[parts[0]] = parts[1]
+                                except ValueError:
+                                    pass
+                        with open(labels_path, "w") as f:
+                            _json.dump(labels, f)
+                        _log(f"Saved {len(labels)} labels to {labels_path.name}", workflow.verbose)
+                    except Exception as e:
+                        _log(f"Could not download labels: {e}", workflow.verbose)
+
+            # Determine output path based on data type
+            if dataset.data_type == "vector" and not dataset.rasterize:
+                output_path = workflow.output_dir / f"harmonized_{dataset.name}.geojson"
+            else:
+                output_path = workflow.output_dir / f"harmonized_{dataset.name}.tif"
 
             if dataset.data_type == "raster":
                 # If downloaded from ImageServer, it's already at target resolution
@@ -1001,9 +1524,17 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
                     burn_value=dataset.burn_value,
                     verbose=workflow.verbose,
                 )
+            elif dataset.data_type == "vector" and not dataset.rasterize:
+                # Keep vector as vector - reproject and clip to extent
+                harmonize_vector(
+                    source_file,
+                    grid,
+                    output_path,
+                    verbose=workflow.verbose,
+                )
             else:
                 raise NotImplementedError(
-                    "Vector outputs are currently supported only through rasterization."
+                    f"Unsupported data type: {dataset.data_type}"
                 )
 
             output_files.append(output_path)
