@@ -1,31 +1,31 @@
-# basic_OASIS
+# Geospatial Harmonization with LLMs
 
-`basic_OASIS` is a lightweight MkDocs + Material starter for clear project documentation. It is designed to stay minimal, readable, and easy to extend.
+A template for using large language models to harmonize environmental science datasets from user-provided URLs.
 
-[Explore Examples](examples.md){ .md-button .md-button--primary }
-[View Repository](https://github.com/CU-ESIIL/basic_OASIS){ .md-button }
+[See Examples](examples.md){ .md-button .md-button--primary }
+[View Repository](https://github.com/CU-ESIIL/LLM_lesson_exemplar){ .md-button }
 
 <div class="grid cards" markdown>
 
-- **Code**
+- **Reference Example**
 
   ---
 
-  Capture setup steps, scripts, and reproducible snippets in one place.
+  The Colorado fire risk example shows how to harmonize raster, vector, and climate model data into a common grid and visualization.
 
-- **Data**
-
-  ---
-
-  Document data access, formats, and provenance so work stays transparent.
-
-- **Docs**
+- **Your Workflows**
 
   ---
 
-  Write concise guides that future contributors can quickly understand.
+  Create your own analysis in `workflows/`. Each project is self-contained — script and outputs in one folder.
+
+- **Core Library**
+
+  ---
+
+  `src/geospatial_harmonizer.py` handles downloads, reprojection, resampling, rasterization, and visualization. Import it, don't modify it.
 
 </div>
 
-!!! note "Template-first by design"
-    This site is intentionally minimal. Start simple, then extend only what your project needs.
+!!! note "Template usage"
+    Clone or fork this repository, then add your own analysis scripts to `workflows/`. The `examples/` directory is read-only reference material.

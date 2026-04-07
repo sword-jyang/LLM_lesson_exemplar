@@ -1,5 +1,36 @@
 # AGENTS.md
 
+## Repository Purpose
+
+This repository is a **template for scientists** learning how AI can help harmonize environmental datasets. It ships with a Colorado fire risk example so scientists can see what kinds of data the system can process and so the agent can learn from a concrete worked example.
+
+---
+
+## Directory Structure
+
+```
+src/                              Core harmonization library — do NOT modify
+examples/
+  colorado_fire_risk/             Reference example — do NOT modify
+    colorado_harmonization.py
+    output/                       Generated outputs for this example
+workflows/
+  my_project/                     Each user analysis is its own folder
+    my_script.py
+    output/                       Generated outputs for this project
+docs/                             Website source
+```
+
+Each project — whether an example or a user workflow — is **self-contained**: the script and its outputs live in the same folder. `output/` is always a subfolder of the project, never a top-level directory.
+
+When a scientist asks you to analyze new data:
+- Create a new folder in `workflows/my_project_name/`
+- Put the script inside it
+- Set `output_dir=Path(__file__).parent / "output"` so outputs land next to the script
+- Do NOT create files in `examples/` — that is read-only teaching material
+
+---
+
 ## Core Operating Contract
 
 - Treat this repository as the source of truth.
@@ -15,7 +46,6 @@
 - Inspect repository structure before editing.
 - Make the smallest diff that solves the request.
 - Update related docs when behavior, workflows, or outputs change.
-- Update changelog, dev log, or equivalent history files for meaningful changes.
 - Preserve existing structure and historical context.
 - Do not perform destructive rewrites unless explicitly requested.
 
@@ -97,40 +127,46 @@ When a dataset is provided as a URL, the agent MUST:
 
 1. **Download**
 
-   - Save to a structured data directory (e.g., `data/raw/`)
-   - Preserve original filenames
-   - Avoid overwriting existing data unless explicitly instructed
+   - The harmonizer handles downloads internally; pass the URL via `DatasetSpec`
+   - Raw files are written to a temporary directory during processing
+   - Avoid overwriting existing harmonized outputs unless explicitly instructed
 
 2. **Extract (if needed)**
 
-   - Detect archive type automatically
-   - Extract to:
-
-     ```
-     data/raw/<dataset_name>/
-     ```
+   - Detect archive type automatically (ZIP is handled by the harmonizer)
 
 3. **Discover + Select Data**
 
    - Identify valid geospatial files:
 
-     - Raster: `.tif`, `.tiff`
-     - Vector: `.shp`, `.geojson`, `.gdb`
-   - If multiple valid files exist → ask the user which to use
+     - Raster: `.tif`, `.tiff`, `.img`
+     - Vector: `.shp`, `.geojson`, `.gdb`, `.gpkg`
+   - If multiple valid files exist inside an archive → ask the user which to use
    - Prefer primary or highest-quality datasets when obvious
 
 ---
 
-### Data Organization
+### Output Organization
 
-The agent SHOULD organize data as:
+Each project writes outputs into its own `output/` subfolder, co-located with the script:
 
 ```
-data/
-  raw/
-  processed/
-    harmonized/
+examples/colorado_fire_risk/
+  colorado_harmonization.py
+  output/
+    harmonized_*.tif             # harmonized rasters (gitignored)
+    harmonized_*.geojson         # harmonized vectors (gitignored)
+    harmonized_visualization.png # static map (tracked in git)
+    harmonized_visualization.html# interactive map (tracked in git)
+
+workflows/my_project/
+  my_script.py
+  output/
+    harmonized_*.tif             # (gitignored)
+    harmonized_visualization.png # (tracked)
 ```
+
+Always set `output_dir=Path(__file__).parent / "output"` in new scripts.
 
 ---
 
@@ -296,12 +332,19 @@ For datasets in NetCDF format (MACAv2, CMIP6, ERA5 subsets, etc.):
 **MACAv2 CMIP5 OPeNDAP URL pattern:**
 ```
 http://thredds.northwestknowledge.net:8080/thredds/dodsC/
-  agg_macav2metdata_{variable}_{model}_r1i1p1_{scenario}_{start}_{end}_CONUS_monthly.nc
+  agg_macav2metdata_{variable}_{model}_{ensemble}_{scenario}_{start}_{end}_CONUS_monthly.nc
 ```
 
 Variables: `tasmax`, `tasmin`, `pr`, `rhsmax`, `rhsmin`, `huss`, `rsds`, `was`, `uas`, `vas`
 Models: `CCSM4`, `CanESM2`, `HadGEM2-ES365`, `MIROC5`, `IPSL-CM5A-LR`, and 15 others
 Scenarios: `historical` (1950–2005), `rcp45` (2006–2099), `rcp85` (2006–2099)
+
+**Note — ensemble member varies by model.** Do not assume `r1i1p1`. Verify by
+browsing the THREDDS catalog XML at:
+```
+http://thredds.northwestknowledge.net:8080/thredds/catalog/MACAV2/catalog.xml
+```
+Example: CCSM4 uses `r6i1p1`, not `r1i1p1`.
 
 ---
 
@@ -384,8 +427,7 @@ The agent SHOULD support real-world workflows involving:
 
 See:
 
-- `examples/colorado_harmonization.py`
-- `notebooks/colorado_harmonization_demo.ipynb`
+- `examples/colorado_fire_risk/colorado_harmonization.py`
 
 ---
 

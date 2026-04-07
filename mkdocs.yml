@@ -1,9 +1,9 @@
-site_name: "basic_OASIS"
-site_description: "Minimal project website"
-site_url: "https://cu-esiil.github.io/basic_OASIS/"
+site_name: "Geospatial Harmonization with LLMs"
+site_description: "A template for using LLMs to harmonize environmental science datasets"
+site_url: "https://cu-esiil.github.io/LLM_lesson_exemplar/"
 
-repo_name: "CU-ESIIL/basic_OASIS"
-repo_url: "https://github.com/CU-ESIIL/basic_OASIS"
+repo_name: "CU-ESIIL/LLM_lesson_exemplar"
+repo_url: "https://github.com/CU-ESIIL/LLM_lesson_exemplar"
 edit_uri: "edit/main/docs/"
 
 nav:

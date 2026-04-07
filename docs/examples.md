@@ -10,18 +10,20 @@ The `geospatial_harmonizer` module helps harmonize multiple geospatial datasets 
 
 ### Running the Colorado Example
 
-The main example harmonizes three datasets for Colorado fire risk analysis:
+The main example harmonizes four datasets for Colorado fire risk analysis:
 
 ```bash
-python examples/colorado_harmonization.py
+python examples/colorado_fire_risk/colorado_harmonization.py
 ```
 
 This downloads and processes:
-- Wildfire Hazard Potential (raster) from GeoPlatform ImageServer
-- MTBS Burned Area Boundaries (vector, rasterized) from USGS
-- Microsoft Building Footprints (vector, rasterized) for Colorado
 
-Output is saved to `output/colorado_harmonized_output/`.
+- **FBFM40 Fire Behavior Fuel Models** (raster) — Landfire 2024 Scott and Burgan 40-class model
+- **MACAv2 Winter Precipitation** (raster) — CCSM4 RCP8.5 Dec–Mar mean 2006–2099, streamed via OPeNDAP
+- **MTBS Burned Area Boundaries** (vector) — USGS fire perimeter data, kept as vector
+- **Microsoft Building Footprints** (vector, rasterized) — Colorado buildings rasterized to presence/absence at ~270 m
+
+Output is saved to `examples/colorado_fire_risk/output/`.
 
 ### Programmatic Usage
 
@@ -69,28 +71,16 @@ workflow = ExampleWorkflow(
     verbose=True,
 )
 
-output_files = run_harmonization_example(workflow)
+output_files, interactive_map = run_harmonization_example(workflow)
 ```
 
 ### Supported Data Types
 
 - **Raster**: GeoTIFF, COG, IMG (downloaded and harmonized)
-- **Vector**: GeoJSON, Shapefile (rasterized to match raster grid)
+- **NetCDF / OPeNDAP**: Climate model outputs (MACAv2, ERA5 subsets) — set `netcdf_variable` and use a THREDDS `dodsC` URL to subset spatially before download
+- **Vector**: GeoJSON, Shapefile (optionally rasterized to match the raster grid)
 - **Archives**: ZIP files (automatically extracted)
-
-### ArcGIS ImageServer Support
-
-The harmonizer can download directly from ArcGIS ImageServer endpoints:
-
-```python
-DATASETS = [
-    DatasetSpec(
-        name="fbfm40_fuel_models",
-        url="https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip",
-        data_type="raster",
-    ),
-]
-```
+- **STAC**: Cloud-native collections (set `is_stac=True`)
 
 ### Output Structure
 
@@ -100,20 +90,47 @@ After running, the output directory contains:
 output/
 └── colorado_harmonized_output/
     ├── harmonized_fbfm40_fuel_models.tif
-    ├── harmonized_mtbs_burned_areas.tif
+    ├── harmonized_pr_winter_rcp85_ccsm4.tif
+    ├── harmonized_mtbs_burned_areas.geojson
     ├── harmonized_building_footprints.tif
     ├── harmonized_visualization.png
     └── harmonized_visualization.html
 ```
 
 All harmonized rasters share:
-- Common CRS (e.g., EPSG:4326)
-- Common extent (bounding box)
-- Common resolution (pixel size)
+
+- Common CRS (EPSG:4326)
+- Common extent (Colorado bounding box)
+- Common resolution (~270 m / 0.00243°)
 
 ---
 
 ## Core Functions
+
+### `DatasetSpec`
+
+Dataclass describing a single dataset to harmonize. Key fields:
+
+| Field | Description |
+|---|---|
+| `name` | Short identifier used in output filenames |
+| `url` | Direct download URL, OPeNDAP endpoint, or STAC API root |
+| `data_type` | `"raster"` or `"vector"` |
+| `rasterize` | Rasterize vector to match the target grid |
+| `burn_value` | Value to burn when rasterizing (default `1`) |
+| `resampling_method` | `"nearest"` (categorical), `"bilinear"` (continuous), or `"cubic"`; auto-detected from dtype if not set |
+| `labels_url` | URL to a CSV with `VALUE,LABEL` columns for legend labels (e.g. FBFM40 fuel model names) |
+| `netcdf_variable` | Variable name inside a NetCDF file (e.g. `"pr"`, `"tasmax"`) |
+| `netcdf_months` | Months to average over, e.g. `[12, 1, 2, 3]` for Dec–Mar winter mean |
+| `secondary_url` | Second OPeNDAP URL for derived variables (e.g. rhsmin for VPD) |
+| `secondary_netcdf_variable` | Variable name in the secondary NetCDF |
+| `is_wcs` | Download from a WCS endpoint; set `wcs_layer` to the coverage name |
+| `is_wms` | Download from a WMS endpoint; set `wms_layer` to the layer name |
+| `is_stac` | Search a STAC catalog instead of downloading directly |
+| `stac_collection` | STAC collection ID, e.g. `"sentinel-2-l2a"` |
+| `stac_asset` | Asset key to download, e.g. `"B08"`, `"visual"` |
+| `stac_datetime` | ISO-8601 date or range, e.g. `"2023-06-01/2023-08-31"` |
+| `stac_query` | Extra STAC filter properties, e.g. `{"eo:cloud_cover": {"lt": 20}}` |
 
 ### `build_grid_spec(target_crs, target_extent, target_resolution)`
 
@@ -134,6 +151,10 @@ Rasterizes vector geometries onto the target grid.
 ### `create_visualization(outputs, output_path, verbose)`
 
 Creates a multi-panel matplotlib visualization of harmonized outputs.
+
+### `create_interactive_visualization(outputs, target_extent, output_path, verbose)`
+
+Creates a Folium HTML map with per-layer toggle checkboxes and opacity sliders.
 
 ### `run_harmonization_example(workflow)`
 
