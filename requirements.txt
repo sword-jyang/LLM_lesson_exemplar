@@ -13,5 +13,10 @@ branca>=0.6
 # Configuration support for examples
 pyyaml>=6.0
 
-# Optional: STAC client for data discovery
-# pystac-client>=0.7
+# STAC client for cloud-native data discovery (Sentinel-2, Landsat, NAIP, etc.)
+pystac-client>=0.7
+
+# Climate / scientific array formats (NetCDF, OPeNDAP, Zarr)
+xarray>=2024.0
+netCDF4>=1.6
+zarr>=2.0

@@ -69,10 +69,25 @@ The agent MUST support workflows where users provide datasets via URLs (e.g., zi
 
 ### Supported Input Types
 
-- Direct raster files (GeoTIFF, COG)
-- Vector files (GeoJSON, Shapefile, GDB)
-- Compressed archives (`.zip`, `.tar`, `.gz`)
-- Remote URLs (HTTP, HTTPS, S3)
+| Format | Extension(s) | Handler | Notes |
+|---|---|---|---|
+| GeoTIFF / COG | `.tif`, `.tiff` | rasterio | Primary raster format |
+| ERDAS Imagine | `.img` | rasterio | Discovered automatically |
+| GeoJSON | `.geojson`, `.json` | geopandas | Primary vector format |
+| Shapefile | `.shp` | geopandas | Auto-discovered inside ZIP |
+| GeoPackage | `.gpkg` | geopandas | |
+| NetCDF | `.nc` | xarray + rasterio | Requires `netcdf_variable` — see below |
+| Zarr | `.zarr` | xarray | Cloud-native array store |
+| STAC catalog | (URL) | pystac-client | Set `is_stac=True` — see below |
+| Compressed archive | `.zip` | zipfile | Extracted automatically |
+
+**Formats NOT yet supported — preprocess to GeoTIFF first:**
+
+- **HDF4 / HDF5** (`.hdf`, `.h5`, `.he4`, `.he5`) — used by MODIS, VIIRS, SRTM.
+  Convert with: `gdal_translate HDF4_EOS:EOS_GRID:"file.hdf":Grid:Band output.tif`
+- **GRIB / GRIB2** (`.grb`, `.grb2`) — used by ERA5, GFS, ECMWF weather models.
+  Convert with: `cfgrib` + `xarray`, then write to GeoTIFF via rasterio.
+- **LAS / LAZ point clouds** — LiDAR data; requires `pdal` to rasterize to a DEM first.
 
 ---
 
@@ -208,9 +223,17 @@ The agent MUST:
 
 ### Resampling Rules
 
-- Categorical → nearest
-- Continuous → bilinear (default) or cubic
-- Unknown → ask
+| Data type | Method | Reason |
+|---|---|---|
+| Categorical (land cover, fuel models, soil class) | `nearest` | Interpolating between class codes produces meaningless values |
+| Continuous (temperature, VPD, elevation, precipitation) | `bilinear` | Smooth interpolation preserves gradients |
+| Continuous, high precision needed | `cubic` | Better edge accuracy at cost of speed |
+| Unknown | Ask the user | Cannot infer safely |
+
+Set `resampling_method` on `DatasetSpec` explicitly.  If not set, the harmonizer
+auto-detects: integer dtype → `nearest`, float dtype → `bilinear`.  Always verify
+for datasets where the dtype does not match the data type (e.g. float-encoded
+categorical data).
 
 ---
 
@@ -231,6 +254,69 @@ If NO:
 
 - Keep vector format
 - Align CRS and extent only
+
+---
+
+## STAC Data Sources
+
+Use `is_stac=True` on a `DatasetSpec` to search a STAC catalog and download an
+asset.  Key fields:
+
+| Field | Description | Example |
+|---|---|---|
+| `url` | STAC API root URL | `"https://planetarycomputer.microsoft.com/api/stac/v1"` |
+| `stac_collection` | Collection ID | `"sentinel-2-l2a"`, `"landsat-c2-l2"`, `"cop-dem-glo-30"` |
+| `stac_asset` | Asset key to download | `"B08"`, `"SR_B4"`, `"visual"`, `"data"` |
+| `stac_datetime` | ISO-8601 date or range | `"2023-06-01/2023-08-31"` |
+| `stac_query` | Extra filter properties | `{"eo:cloud_cover": {"lt": 20}}` |
+
+The harmonizer automatically picks the least-cloudy item within the search results.
+If an asset key is wrong, the error message lists all available keys.
+
+**Common public STAC catalogs:**
+- Microsoft Planetary Computer: `https://planetarycomputer.microsoft.com/api/stac/v1`
+- Earth Search (AWS): `https://earth-search.aws.element84.com/v1`
+- NASA CMR STAC: `https://cmr.earthdata.nasa.gov/stac`
+
+---
+
+## NetCDF and OPeNDAP Sources
+
+For datasets in NetCDF format (MACAv2, CMIP6, ERA5 subsets, etc.):
+
+- Set `netcdf_variable` on `DatasetSpec` to the variable name inside the file
+  (e.g. `"air_temperature"`, `"pr"`, `"relative_humidity"`).
+- For derived quantities that require two input variables (e.g. VPD from tasmax +
+  rhsmin), set `secondary_url` and `secondary_netcdf_variable` as well.
+- Use OPeNDAP URLs (THREDDS `dodsC` paths) rather than full file downloads to
+  subset spatially before any data is transferred.
+- The harmonizer fetches both variables in parallel and subsets to the target bbox
+  before triggering the download.
+
+**MACAv2 CMIP5 OPeNDAP URL pattern:**
+```
+http://thredds.northwestknowledge.net:8080/thredds/dodsC/
+  agg_macav2metdata_{variable}_{model}_r1i1p1_{scenario}_{start}_{end}_CONUS_monthly.nc
+```
+
+Variables: `tasmax`, `tasmin`, `pr`, `rhsmax`, `rhsmin`, `huss`, `rsds`, `was`, `uas`, `vas`
+Models: `CCSM4`, `CanESM2`, `HadGEM2-ES365`, `MIROC5`, `IPSL-CM5A-LR`, and 15 others
+Scenarios: `historical` (1950–2005), `rcp45` (2006–2099), `rcp85` (2006–2099)
+
+---
+
+## Nodata Handling
+
+- The harmonizer preserves the source nodata value through reprojection.
+- If no nodata is declared in the source file, it defaults to `0` for integer
+  dtypes and `NaN` for float dtypes.
+- Pixels outside the source extent are filled with the nodata value after
+  reprojection — they are **not** filled with zero.
+- When combining layers for analysis, mask pixels where **any** layer is nodata
+  before computing statistics.
+- If a dataset encodes nodata as a large sentinel value (e.g. `-9999`, `32767`),
+  verify this is correctly declared in the file metadata.  If not, set it
+  explicitly before passing to the harmonizer.
 
 ---
 
@@ -312,8 +398,35 @@ See:
 
 ---
 
+## Interactive Map: Large Vector Handling
+
+When a vector layer exceeds 50 MB on disk, the harmonizer automatically simplifies
+it before embedding in the HTML map:
+
+- Geometry is simplified using a tolerance of ~0.1% of the shorter bbox dimension
+  (≈100 m for a state-scale map like Colorado).
+- Coordinates are snapped to a 0.0001° grid (~11 m precision).
+- All non-geometry attribute columns are dropped to minimize file size.
+- The simplification tolerance and resulting size are logged so the user can see
+  exactly what happened.
+
+**The agent MUST disclose this to the user whenever simplification occurs.**
+Example disclosure:
+
+> "The building footprints layer (707 MB) was too large to embed in the HTML map
+> as-is. I simplified the geometry to ~100 m tolerance and reduced coordinate
+> precision to 4 decimal places before embedding — the visual result at state
+> scale is identical, but individual building shapes are approximated. If you
+> need full-fidelity vector tiles, consider serving the original GeoJSON as
+> PMTiles or via a WFS endpoint."
+
+---
+
 ## Known Limitations
 
-- GDAL backend reprojection incomplete
-- Vector handling not fully implemented
-- Resolution selection handled at LLM layer
+- **HDF4/HDF5 and GRIB/GRIB2 not supported** — preprocess to GeoTIFF with GDAL or cfgrib before using the harmonizer.
+- **Multi-band rasters** — only band 1 is read; multi-spectral inputs (Landsat, Sentinel) must be split per band or use the STAC asset key to select a single band.
+- **Time series output** — the pipeline produces one harmonized raster per dataset; stacked temporal outputs are not yet supported.
+- **Attribute-based rasterization** — vectors are rasterized with a constant burn value; to burn a field value (e.g. fire year, watershed ID) requires a custom step.
+- **DEM-derived products** — slope and aspect are not computed automatically; download a DEM and derive these externally before adding to the workflow.
+- **Spectral indices** — NDVI, NBR, EVI are not computed automatically; download the required bands separately and compute before harmonizing.

@@ -51,6 +51,42 @@ DISCOVERED_COLOR_MAP: dict | None = None
 # Global labels map: integer value -> short label string (e.g. 101 -> "GR1")
 DISCOVERED_LABELS: dict | None = None
 
+# Tokens that should always be rendered in ALL CAPS in display labels.
+_KNOWN_ACRONYMS: set[str] = {
+    "fbfm", "fbfm40", "fbfm13", "mtbs", "pr", "vpd",
+    "rcp", "rcp45", "rcp85", "ccsm", "ccsm4",
+    "dem", "ndvi", "nbr", "evi",
+    "conus", "wms", "wcs", "crs", "cog", "stac", "naip",
+}
+
+
+def _format_layer_name(name: str) -> str:
+    """Convert a snake_case layer name to a human-readable title.
+
+    Tokens that are known acronyms (MTBS, FBFM40, PR, RCP85, …) are
+    uppercased; all other tokens are title-cased.
+
+    Examples
+    --------
+    >>> _format_layer_name("fbfm40_fuel_models")
+    'FBFM40 Fuel Models'
+    >>> _format_layer_name("pr_winter_rcp85_ccsm4")
+    'PR Winter RCP85 CCSM4'
+    >>> _format_layer_name("mtbs_burned_areas")
+    'MTBS Burned Areas'
+    """
+    tokens = name.replace("_", " ").split()
+    result = []
+    for token in tokens:
+        lower = token.lower()
+        # Strip trailing digits to check the base (e.g. "rcp85" → base "rcp")
+        base = lower.rstrip("0123456789")
+        if lower in _KNOWN_ACRONYMS or base in _KNOWN_ACRONYMS:
+            result.append(token.upper())
+        else:
+            result.append(token.title())
+    return " ".join(result)
+
 
 @dataclass
 class DatasetSpec:
@@ -64,6 +100,17 @@ class DatasetSpec:
     is_wms: bool = False
     wms_layer: str = None
     labels_url: str | None = None  # URL to a CSV with VALUE,LABEL columns for legend labels
+    secondary_url: str | None = None  # Second OPeNDAP URL for derived variables (e.g. rhsmin for VPD)
+    secondary_netcdf_variable: str | None = None  # Variable name in the secondary NetCDF
+    netcdf_variable: str | None = None  # Variable name in primary NetCDF (e.g. "tasmax")
+    netcdf_months: list[int] | None = None  # Months to average over, e.g. [12,1,2,3] for winter
+    resampling_method: Literal["bilinear", "nearest", "cubic"] | None = None  # None = auto-detect from data_type
+    # STAC fields — set is_stac=True to discover and download via a STAC catalog
+    is_stac: bool = False
+    stac_collection: str | None = None   # e.g. "sentinel-2-l2a"
+    stac_asset: str | None = None        # asset key to download, e.g. "B08" or "visual"
+    stac_datetime: str | None = None     # ISO-8601 range, e.g. "2023-06-01/2023-08-31"
+    stac_query: dict | None = None       # extra search filters, e.g. {"eo:cloud_cover": {"lt": 20}}
 
 
 @dataclass
@@ -390,6 +437,95 @@ def download_wcs_coverage(
             raise RuntimeError(f"Failed to download WCS coverage: {e2}")
 
 
+def download_stac_item(
+    catalog_url: str,
+    collection: str,
+    asset_key: str,
+    bbox: BBox,
+    output_dir: Path,
+    datetime: str | None = None,
+    query: dict | None = None,
+    verbose: bool = True,
+) -> Path:
+    """Search a STAC catalog and download the best-matching asset as a GeoTIFF.
+
+    Selects the item with the lowest ``eo:cloud_cover`` among those returned by
+    the search (falls back to the first item if the property is absent).  COG
+    assets are streamed via GDAL's vsicurl so only the requested bbox is read.
+
+    Args:
+        catalog_url: Root STAC API URL, e.g.
+            "https://planetarycomputer.microsoft.com/api/stac/v1"
+        collection: STAC collection ID, e.g. "sentinel-2-l2a" or "landsat-c2-l2".
+        asset_key: Asset key to download, e.g. "B08", "SR_B4", "visual".
+        bbox: Bounding box (xmin, ymin, xmax, ymax) in EPSG:4326.
+        output_dir: Directory to save the downloaded file.
+        datetime: ISO-8601 date or range, e.g. "2023-06-01/2023-08-31".
+        query: Extra STAC search filter properties,
+            e.g. {"eo:cloud_cover": {"lt": 20}}.
+        verbose: Print progress messages.
+
+    Returns:
+        Path to the downloaded GeoTIFF.
+    """
+    try:
+        import pystac_client
+    except ImportError:
+        raise ImportError("pystac-client is required for STAC downloads: pip install pystac-client")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{collection}_{asset_key}.tif"
+
+    if output_path.exists():
+        _log(f"Using existing STAC download: {output_path.name}", verbose)
+        return output_path
+
+    _log(f"Searching STAC catalog: {catalog_url}", verbose)
+    _log(f"  collection={collection}  asset={asset_key}  datetime={datetime}", verbose)
+
+    client = pystac_client.Client.open(catalog_url)
+    search = client.search(
+        collections=[collection],
+        bbox=list(bbox),
+        datetime=datetime,
+        query=query or {},
+        max_items=50,
+    )
+    items = list(search.items())
+    if not items:
+        raise FileNotFoundError(
+            f"No STAC items found for collection={collection!r} bbox={bbox} datetime={datetime!r}"
+        )
+
+    # Pick the least cloudy item
+    def _cloud_cover(item):
+        return item.properties.get("eo:cloud_cover", 0) or 0
+
+    best = min(items, key=_cloud_cover)
+    _log(f"  Selected item: {best.id}  cloud_cover={_cloud_cover(best):.1f}%", verbose)
+
+    if asset_key not in best.assets:
+        available = list(best.assets.keys())
+        raise KeyError(
+            f"Asset {asset_key!r} not found in item {best.id!r}. "
+            f"Available assets: {available}"
+        )
+
+    asset_href = best.assets[asset_key].href
+    _log(f"  Downloading asset: {asset_href}", verbose)
+
+    # Stream via rasterio (works for COGs without downloading the full file)
+    with rasterio.open(asset_href) as src:
+        data = src.read()
+        meta = src.meta.copy()
+        meta.update({"driver": "GTiff"})
+        with rasterio.open(output_path, "w", **meta) as dst:
+            dst.write(data)
+
+    _log(f"  Saved {output_path.name} ({output_path.stat().st_size / 1024 / 1024:.1f} MB)", verbose)
+    return output_path
+
+
 def extract_archive_if_needed(path: Path, output_dir: Path, verbose: bool = True) -> Path:
     if path.suffix.lower() != ".zip":
         return path.parent
@@ -617,8 +753,216 @@ def _parse_csv_color_map(csv_path: Path) -> dict | None:
     return color_map if color_map else None
 
 
-def harmonize_raster(input_path: Path, grid: GridSpec, output_path: Path, verbose: bool = True) -> Path:
-    """Harmonize raster to target grid, clipping to extent first for efficiency."""
+def _fetch_jja_subset(url: str, variable: str, xmin: float, xmax: float, ymin: float, ymax: float):
+    """Open a MACAv2 OPeNDAP URL, subset to bbox and JJA months, and download.
+
+    Uses chunks so xarray only fetches the selected slice, not the full CONUS dataset.
+    Intended to be called in a thread alongside a sibling fetch.
+    """
+    import xarray as xr
+    ds = xr.open_dataset(url, engine="netcdf4", chunks={"time": 12})
+    arr = ds[variable].sel(
+        lon=slice(xmin + 360, xmax + 360),  # MACAv2 uses 0–360 longitude
+        lat=slice(ymin, ymax),
+    )
+    jja = arr.sel(time=arr.time.dt.month.isin([6, 7, 8]))
+    result = jja.compute()
+    ds.close()
+    return result
+
+
+def compute_vpd_geotiff(
+    tasmax_url: str,
+    rhsmin_url: str,
+    bbox: BBox,
+    output_path: Path,
+    tasmax_var: str = "air_temperature",
+    rhsmin_var: str = "relative_humidity",
+    verbose: bool = True,
+) -> Path:
+    """Download MACAv2 tasmax + rhsmin via OPeNDAP, compute JJA mean VPD, save as GeoTIFF.
+
+    Both variables are fetched in parallel. Only the Colorado bbox and JJA months are
+    downloaded (not the full CONUS dataset).
+
+    VPD (kPa) = es(Tmax) * (1 - RHmin / 100)
+    where es(T) = 0.6108 * exp(17.27 * T_c / (T_c + 237.3))  [Buck equation, T in Celsius]
+
+    Args:
+        tasmax_url: OPeNDAP URL for MACAv2 tasmax variable
+        rhsmin_url: OPeNDAP URL for MACAv2 rhsmin variable
+        bbox: Bounding box (xmin, ymin, xmax, ymax) in EPSG:4326 to subset before downloading
+        output_path: Path to save the output GeoTIFF
+        tasmax_var: Variable name inside the tasmax NetCDF file
+        rhsmin_var: Variable name inside the rhsmin NetCDF file
+        verbose: Print progress messages
+
+    Returns:
+        Path to the output GeoTIFF
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    xmin, ymin, xmax, ymax = bbox
+
+    _log("Fetching MACAv2 tasmax + rhsmin in parallel (JJA, Colorado bbox)...", verbose)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_tmax = pool.submit(_fetch_jja_subset, tasmax_url, tasmax_var, xmin, xmax, ymin, ymax)
+        f_rh   = pool.submit(_fetch_jja_subset, rhsmin_url, rhsmin_var, xmin, xmax, ymin, ymax)
+        tmax_jja = f_tmax.result()
+        rh_jja   = f_rh.result()
+
+    # Filter to JJA (June=6, July=7, August=8) — peak fire season
+    _log("Computing JJA mean VPD across 2006-2099...", verbose)
+
+    # Convert tasmax from Kelvin to Celsius
+    tmax_c = tmax_jja - 273.15
+
+    # Saturation vapor pressure [kPa] via Buck equation
+    es = 0.6108 * np.exp(17.27 * tmax_c / (tmax_c + 237.3))
+
+    # VPD [kPa]
+    vpd = es * (1.0 - rh_jja / 100.0)
+
+    # Mean over all JJA time steps
+    vpd_mean = vpd.mean(dim="time").compute()
+
+    values = vpd_mean.values.astype("float32")  # shape: (lat, lon)
+
+    # Build transform — MACAv2 lats are ascending, rasterio needs top-left origin
+    lons = (vpd_mean.coords["lon"].values - 360.0)  # convert back to -180..180
+    lats = vpd_mean.coords["lat"].values
+    lon_res = float(lons[1] - lons[0])
+    lat_res = float(lats[1] - lats[0])
+    transform = rasterio.transform.from_origin(
+        lons[0] - lon_res / 2,
+        lats[-1] + abs(lat_res) / 2,
+        lon_res,
+        abs(lat_res),
+    )
+    # Flip so north is up (rasterio convention: row 0 = northernmost)
+    values = np.flipud(values)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(
+        output_path, "w",
+        driver="GTiff",
+        height=values.shape[0],
+        width=values.shape[1],
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=transform,
+        nodata=np.nan,
+    ) as dst:
+        dst.write(values, 1)
+
+    _log(
+        f"  VPD GeoTIFF saved: {output_path.name} "
+        f"({values.shape[1]}x{values.shape[0]} pixels, ~4 km native resolution)",
+        verbose,
+    )
+    ds_tmax.close()
+    ds_rh.close()
+    return output_path
+
+
+def fetch_netcdf_seasonal_geotiff(
+    url: str,
+    variable: str,
+    bbox: BBox,
+    output_path: Path,
+    months: list[int] | None = None,
+    verbose: bool = True,
+) -> Path:
+    """Download a single MACAv2 variable via OPeNDAP, compute seasonal mean, save as GeoTIFF.
+
+    Use this when the desired variable is pre-computed in the catalog (e.g. ``vpd``,
+    ``tasmax``, ``pr``).  For derived quantities that require two inputs use
+    ``compute_vpd_geotiff`` instead.
+
+    Args:
+        url: OPeNDAP URL for the NetCDF dataset.
+        variable: Variable name inside the file (e.g. ``"vpd"``, ``"pr"``).
+        bbox: Bounding box (xmin, ymin, xmax, ymax) in EPSG:4326.
+        output_path: Path to save the output GeoTIFF.
+        months: List of month numbers to average over, e.g. ``[12, 1, 2, 3]`` for
+            winter or ``[6, 7, 8]`` for summer.  Defaults to all months (annual mean).
+        verbose: Print progress messages.
+
+    Returns:
+        Path to the output GeoTIFF.
+    """
+    import xarray as xr
+    season_label = f"months={months}" if months else "annual"
+    _log(f"Fetching {variable} via OPeNDAP ({season_label}, bbox subset)...", verbose)
+    xmin, ymin, xmax, ymax = bbox
+
+    ds = xr.open_dataset(url, engine="netcdf4", chunks={"time": 12})
+    arr = ds[variable].sel(
+        lon=slice(xmin + 360, xmax + 360),
+        lat=slice(ymin, ymax),
+    )
+    if months:
+        arr = arr.sel(time=arr.time.dt.month.isin(months))
+    data = arr.compute()
+    ds.close()
+
+    values = data.mean(dim="time").values.astype("float32")
+
+    lons = data.coords["lon"].values - 360.0  # convert 0–360 → −180–180
+    lats = data.coords["lat"].values
+    lon_res = float(lons[1] - lons[0])
+    lat_res = float(lats[1] - lats[0])
+    transform = rasterio.transform.from_origin(
+        lons[0] - lon_res / 2,
+        lats[-1] + abs(lat_res) / 2,
+        lon_res,
+        abs(lat_res),
+    )
+    values = np.flipud(values)  # row 0 = northernmost
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(
+        output_path, "w",
+        driver="GTiff",
+        height=values.shape[0],
+        width=values.shape[1],
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=transform,
+        nodata=np.nan,
+    ) as dst:
+        dst.write(values, 1)
+
+    _log(
+        f"  Saved {output_path.name} "
+        f"({values.shape[1]}x{values.shape[0]} pixels, ~4 km native resolution)",
+        verbose,
+    )
+    return output_path
+
+
+def harmonize_raster(
+    input_path: Path,
+    grid: GridSpec,
+    output_path: Path,
+    resampling_method: str | None = None,
+    verbose: bool = True,
+) -> Path:
+    """Harmonize raster to target grid, clipping to extent first for efficiency.
+
+    Args:
+        input_path: Source raster file.
+        grid: Target grid (CRS, extent, resolution).
+        output_path: Where to write the harmonized GeoTIFF.
+        resampling_method: One of "bilinear", "nearest", or "cubic".
+            Use "nearest" for categorical data (land cover, fuel models) to avoid
+            interpolating between class codes.  Use "bilinear" or "cubic" for
+            continuous data (temperature, VPD, elevation).  None defaults to
+            "bilinear".
+        verbose: Print progress messages.
+    """
     _log(f"Harmonizing raster: {input_path.name}", verbose)
 
     with rasterio.open(input_path) as src:
@@ -654,8 +998,36 @@ def harmonize_raster(input_path: Path, grid: GridSpec, output_path: Path, verbos
             out_image = src.read()
             out_transform = src.transform
         
+        # Choose resampling algorithm.
+        # Categorical data (integer dtype, e.g. fuel model codes) must use nearest-
+        # neighbour to avoid interpolating between class codes.  Continuous data
+        # (float) defaults to bilinear.
+        _resampling_map = {
+            "bilinear": Resampling.bilinear,
+            "nearest": Resampling.nearest,
+            "cubic": Resampling.cubic,
+        }
+        if resampling_method is not None:
+            chosen = _resampling_map.get(resampling_method, Resampling.bilinear)
+        elif np.issubdtype(out_image.dtype, np.integer):
+            chosen = Resampling.nearest
+            _log(f"  Integer dtype detected — using nearest-neighbour resampling", verbose)
+        else:
+            chosen = Resampling.bilinear
+
+        # Determine nodata value.  Pixels outside the source extent are filled with
+        # this value after reprojection.  Preserving the source nodata prevents 0
+        # (a valid class code in many datasets) from silently masking real data.
+        src_nodata = src.nodata
+        if src_nodata is None:
+            src_nodata = 0 if np.issubdtype(out_image.dtype, np.integer) else np.nan
+
         # Now reproject the clipped data to target grid
-        dst = np.zeros((out_image.shape[0], grid.height, grid.width), dtype=out_image.dtype)
+        dst = np.full(
+            (out_image.shape[0], grid.height, grid.width),
+            fill_value=src_nodata,
+            dtype=out_image.dtype,
+        )
 
         reproject(
             source=out_image,
@@ -664,7 +1036,9 @@ def harmonize_raster(input_path: Path, grid: GridSpec, output_path: Path, verbos
             src_crs=src.crs,
             dst_transform=grid.transform,
             dst_crs=grid.crs,
-            resampling=Resampling.bilinear,
+            resampling=chosen,
+            src_nodata=src_nodata,
+            dst_nodata=src_nodata,
         )
 
         meta = src.meta.copy()
@@ -675,6 +1049,7 @@ def harmonize_raster(input_path: Path, grid: GridSpec, output_path: Path, verbos
                 "width": grid.width,
                 "transform": grid.transform,
                 "crs": grid.crs,
+                "nodata": src_nodata,
             }
         )
 
@@ -816,12 +1191,26 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
     _log("Creating visualization", verbose)
     _load_color_map_from_output_dir(output_path)
 
+    from matplotlib.gridspec import GridSpec
+    from matplotlib.patches import Patch
+
     n = len(outputs)
-    cols = min(3, n)
+    # Use 2-column layout for 4 datasets, otherwise cap at 3
+    cols = 2 if n == 4 else min(3, n)
     rows = (n + cols - 1) // cols
 
-    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 5 * rows))
-    axes = np.atleast_1d(axes).flatten()
+    # Extra row at the bottom for the composite overlay panel.
+    # The composite row height is set to roughly match the data's geographic
+    # aspect ratio so it does not appear "super wide".
+    fig = plt.figure(figsize=(8 * cols, 6 * rows + 5))
+    gs = GridSpec(rows + 1, cols, figure=fig, hspace=0.4, wspace=0.3,
+                  height_ratios=[6] * rows + [5])
+    axes = [fig.add_subplot(gs[i // cols, i % cols]) for i in range(n)]
+    # Hide unused panel slots in the last per-layer row
+    for i in range(n, rows * cols):
+        fig.add_subplot(gs[i // cols, i % cols]).set_visible(False)
+    # Composite panel spans the full width of the last row
+    ax_composite = fig.add_subplot(gs[rows, :])
 
     for i, (name, path) in enumerate(outputs):
         _log(f"  Processing layer {i+1}/{len(outputs)}: {name}", verbose)
@@ -839,10 +1228,10 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
             gdf.plot(ax=ax, color=style["color"], edgecolor='black',
                     linewidth=0.5, alpha=style["fillOpacity"])
             
-            ax.set_title(name.replace("_", " ").title())
+            ax.set_title(_format_layer_name(name))
             ax.axis("off")
             continue
-        
+
         # Handle raster files
         with rasterio.open(path) as src:
             data = src.read(1)
@@ -929,16 +1318,102 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
                 im = ax.imshow(masked_data, cmap=cmap, vmin=vmin, vmax=vmax, alpha=style["alpha"])
                 plt.colorbar(im, ax=ax, shrink=0.6)
         
-        ax.set_title(name.replace("_", " ").title())
+        ax.set_title(_format_layer_name(name))
         ax.axis("off")
 
-    for i in range(n, len(axes)):
-        fig.delaxes(axes[i])
+    # Composite overlay: all layers stacked on ax_composite
+    import matplotlib.cm as cm
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
+    img_extent = None
+    composite_legend_handles = []
+
+    for i, (layer_name, path) in enumerate(outputs):
+        label = _format_layer_name(layer_name)
+        if path.suffix.lower() in ['.geojson', '.json', '.shp']:
+            style = _get_vector_style(layer_name)
+            gdf = gpd.read_file(path)
+            gdf.plot(ax=ax_composite, color=style["color"], edgecolor='black',
+                     linewidth=0.5, alpha=style["fillOpacity"], zorder=i + 2)
+            composite_legend_handles.append(
+                Patch(facecolor=style["color"], alpha=style["fillOpacity"], label=label)
+            )
+        else:
+            with rasterio.open(path) as src:
+                data = src.read(1)
+                bnds = src.bounds
+                img_extent = [bnds.left, bnds.right, bnds.bottom, bnds.top]
+
+            style = _get_layer_style(layer_name, data, i)
+
+            if style["solid_color"] is not None:
+                r, g, b, a = style["solid_color"]
+                rgba_img = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.float32)
+                rgba_img[:, :, 0] = r
+                rgba_img[:, :, 1] = g
+                rgba_img[:, :, 2] = b
+                rgba_img[:, :, 3] = (data == 1).astype(float) * style["alpha"]
+                ax_composite.imshow(rgba_img, extent=img_extent, aspect='equal',
+                                    origin='upper', zorder=i + 1)
+                composite_legend_handles.append(Patch(facecolor=(r, g, b), alpha=a, label=label))
+            else:
+                vmin = style["vmin"] if style["vmin"] is not None else np.nanmin(data)
+                vmax = style["vmax"] if style["vmax"] is not None else np.nanmax(data)
+                masked_data = np.ma.masked_equal(data, 0)
+                unique_vals = np.unique(data[data > 0])
+
+                if (len(unique_vals) > 20 and "fbfm" in layer_name.lower()
+                        and "color_map" in style and style["color_map"]):
+                    import src.geospatial_harmonizer as _self
+                    all_cats = sorted([int(v) for v in unique_vals.tolist()])
+                    color_map = style["color_map"]
+                    colors = [
+                        (color_map[c][0] / 255, color_map[c][1] / 255, color_map[c][2] / 255)
+                        if c in color_map else (0.7, 0.7, 0.7)
+                        for c in all_cats
+                    ]
+                    cmap = ListedColormap(colors)
+                    color_bounds = [c - 0.5 for c in all_cats] + [all_cats[-1] + 0.5]
+                    norm = BoundaryNorm(color_bounds, cmap.N)
+                    ax_composite.imshow(masked_data, cmap=cmap, norm=norm, extent=img_extent,
+                                        aspect='equal', origin='upper',
+                                        alpha=style["alpha"], zorder=i + 1)
+                    mid = all_cats[len(all_cats) // 2]
+                    mid_color = (
+                        (color_map[mid][0] / 255, color_map[mid][1] / 255, color_map[mid][2] / 255)
+                        if mid in color_map else (0.5, 0.5, 0.5)
+                    )
+                    composite_legend_handles.append(
+                        Patch(facecolor=mid_color, alpha=style["alpha"],
+                              label=f"{label} (see detail panel for full legend)")
+                    )
+                else:
+                    cmap_obj = cm.get_cmap(style["colormap"])
+                    ax_composite.imshow(masked_data, cmap=cmap_obj, vmin=vmin, vmax=vmax,
+                                        extent=img_extent, aspect='equal', origin='upper',
+                                        alpha=style["alpha"], zorder=i + 1)
+                    composite_legend_handles.append(
+                        Patch(facecolor=cmap_obj(0.5), alpha=style["alpha"], label=label)
+                    )
+
+    layer_names = ", ".join(_format_layer_name(ln) for ln, _ in outputs)
+    ax_composite.set_title(f"Combined View: {layer_names}", fontsize=10, pad=8)
+    ax_composite.axis("off")
+    if composite_legend_handles:
+        ax_composite.legend(
+            handles=composite_legend_handles,
+            loc='upper left',
+            bbox_to_anchor=(1.01, 1),
+            borderaxespad=0,
+            fontsize=8,
+            frameon=True,
+            title="Layers",
+            title_fontsize=9,
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
-    plt.close()
+    plt.close(fig)
 
     return output_path
 
@@ -1016,17 +1491,51 @@ def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
                     "color_map": None,
                     "solid_color": None,
                     "alpha": 0.7,
-                "vmin": data.min(),
-                "vmax": data.max(),
+                "vmin": np.nanmin(data),
+                "vmax": np.nanmax(data),
             }
         elif "elevation" in name_lower or "dem" in name_lower:
-            # Elevation - use terrain colormap
             return {
                 "colormap": "terrain",
                 "solid_color": None,
                 "alpha": 0.7,
-                "vmin": data.min(),
-                "vmax": data.max(),
+                "vmin": np.nanmin(data),
+                "vmax": np.nanmax(data),
+                "units": "m",
+            }
+        elif (
+            "pr" in name_lower.split("_")
+            or "precip" in name_lower
+            or "precipitation" in name_lower
+            or name_lower.startswith("pr_")
+            or "_pr_" in name_lower
+        ):
+            # Precipitation — Blues colormap, units in mm day⁻¹
+            return {
+                "colormap": "Blues",
+                "solid_color": None,
+                "alpha": 0.8,
+                "vmin": np.nanmin(data[data > 0]) if np.any(data > 0) else 0,
+                "vmax": np.nanmax(data),
+                "units": "mm day\u207b\u00b9",
+            }
+        elif "vpd" in name_lower or "vapor" in name_lower:
+            return {
+                "colormap": "plasma",
+                "solid_color": None,
+                "alpha": 0.7,
+                "vmin": np.nanmin(data),
+                "vmax": np.nanmax(data),
+                "units": "kPa",
+            }
+        elif "temp" in name_lower or "tasmax" in name_lower or "tasmin" in name_lower:
+            return {
+                "colormap": "RdYlBu_r",
+                "solid_color": None,
+                "alpha": 0.7,
+                "vmin": np.nanmin(data),
+                "vmax": np.nanmax(data),
+                "units": "°C",
             }
         else:
             # Default continuous - use viridis
@@ -1034,8 +1543,8 @@ def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
                 "colormap": "viridis",
                 "solid_color": None,
                 "alpha": 0.7,
-                "vmin": data.min(),
-                "vmax": data.max(),
+                "vmin": np.nanmin(data),
+                "vmax": np.nanmax(data),
             }
 
 
@@ -1074,27 +1583,28 @@ def _get_vector_style(name: str) -> dict:
 
 def create_interactive_visualization(
     outputs: list[tuple[str, Path]],
-    output_path: Path,
     target_extent: tuple[float, float, float, float],
+    output_path: Path | None = None,
     verbose: bool = True
-) -> Path | None:
-    """Create an interactive HTML map visualization with folium.
-    
+) -> folium.Map | None:
+    """Create an interactive folium map visualization.
+
     Args:
         outputs: List of (name, path) tuples for each harmonized layer
-        output_path: Path to save the HTML file
         target_extent: Bounding box (xmin, xmax, ymin, ymax) for the map view
+        output_path: Optional path to save an HTML file. If None, the map is
+            returned for inline display (e.g. in a Jupyter notebook).
         verbose: Print progress messages
-        
+
     Returns:
-        Path to the created HTML file, or None if creation failed
+        folium.Map object, or None if creation failed
     """
     if not FOLIUM_AVAILABLE:
-        _log("Folium not available, falling back to static visualization", verbose)
+        _log("Folium not available, skipping interactive visualization", verbose)
         return None
-    
+
     try:
-        return _create_interactive_visualization_impl(outputs, output_path, target_extent, verbose)
+        return _create_interactive_visualization_impl(outputs, target_extent, output_path, verbose)
     except Exception as e:
         _log(f"Error creating interactive visualization: {e}", verbose)
         import traceback
@@ -1104,10 +1614,10 @@ def create_interactive_visualization(
 
 def _create_interactive_visualization_impl(
     outputs: list[tuple[str, Path]],
-    output_path: Path,
     target_extent: tuple[float, float, float, float],
+    output_path: Path | None = None,
     verbose: bool = True
-) -> Path:
+) -> folium.Map:
     """Internal implementation of interactive visualization creation."""
     _log("Creating interactive HTML visualization", verbose)
     _load_color_map_from_output_dir(output_path)
@@ -1131,6 +1641,10 @@ def _create_interactive_visualization_impl(
         max_zoom=19
     ).add_to(m)
     
+    # Track layer JS variable names for per-layer opacity sliders.
+    # Each entry: (display_name, js_var_name, layer_type, fill_opacity)
+    _opacity_layers: list[tuple[str, str, str, float]] = []
+
     # Add each layer - handle raster and vector differently
     for i, (name, path) in enumerate(outputs):
         _log(f"  Processing layer {i+1}/{len(outputs)}: {name}", verbose)
@@ -1138,10 +1652,10 @@ def _create_interactive_visualization_impl(
         if path.suffix.lower() == '.geojson' or path.suffix.lower() == '.json':
             # Handle vector data as GeoJSON layer
             _log(f"  Adding vector layer: {name}", verbose)
-            
+
             # Get styling for this layer
             style = _get_vector_style(name)
-            
+
             # Read the GeoJSON
             gdf = gpd.read_file(path)
 
@@ -1150,62 +1664,41 @@ def _create_interactive_visualization_impl(
                 if hasattr(gdf[col].dtype, 'kind') and gdf[col].dtype.kind == 'M':
                     gdf[col] = gdf[col].astype(str)
 
-            file_size_mb = path.stat().st_size / 1e6
-            if file_size_mb > 10:
-                # Large vector: rasterize to a presence grid and show as an image overlay.
-                # This preserves full spatial coverage without sampling or simplification.
-                _log(f"  Rasterizing large vector ({file_size_mb:.0f} MB) for HTML display", verbose)
-                bounds = (xmin, ymin, xmax, ymax)
-                # Build a higher-resolution grid so small features (e.g. buildings) are visible
-                aspect = (xmax - xmin) / (ymax - ymin)
-                grid_h = 1500
-                grid_w = max(1, int(grid_h * aspect))
-                transform = from_bounds(xmin, ymin, xmax, ymax, grid_w, grid_h)
-                presence = rasterize(
-                    [(geom, 1) for geom in gdf.geometry if geom is not None],
-                    out_shape=(grid_h, grid_w),
-                    transform=transform,
-                    fill=0,
-                    dtype=np.uint8,
-                    all_touched=True,
+            # Auto-simplify large layers so they embed in HTML without crashing the browser.
+            # Tolerance is ~0.1% of the shorter bbox dimension (~100 m for a state-scale map).
+            size_mb = path.stat().st_size / 1024 / 1024
+            if size_mb > 50:
+                xmin, ymin, xmax, ymax = target_extent
+                tol = min(xmax - xmin, ymax - ymin) * 0.001
+                _log(
+                    f"  Large vector ({size_mb:.0f} MB) — simplifying with tolerance={tol:.4f}° "
+                    f"and reducing coordinate precision before embedding...",
+                    verbose,
                 )
-                from PIL import Image as PILImage
-                hex_c = style["color"].lstrip("#")
-                r_val, g_val, b_val = int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
-                rgba = np.zeros((grid_h, grid_w, 4), dtype=np.uint8)
-                mask_px = presence == 1
-                rgba[mask_px, 0] = r_val
-                rgba[mask_px, 1] = g_val
-                rgba[mask_px, 2] = b_val
-                rgba[mask_px, 3] = int(style["fillOpacity"] * 255)
-                img = PILImage.fromarray(rgba, mode='RGBA')
-                buf = io.BytesIO()
-                img.save(buf, format='PNG', optimize=True)
-                buf.seek(0)
-                img_base64 = base64.b64encode(buf.getvalue()).decode('ascii')
-                # opacity=1.0 because alpha is already baked into the RGBA pixel data
-                folium.raster_layers.ImageOverlay(
-                    image=f"data:image/png;base64,{img_base64}",
-                    bounds=[[ymin, xmin], [ymax, xmax]],
-                    name=name.replace("_", " ").title(),
-                    opacity=1.0,
-                    interactive=False,
-                    zindex=i + 10,
-                ).add_to(m)
-            else:
-                # Small vector: add as interactive GeoJSON layer
-                geojson_str = gdf.to_json()
-                folium.GeoJson(
-                    geojson_str,
-                    name=name.replace("_", " ").title(),
-                    style_function=lambda x, color=style["color"]: {
-                        'fillColor': color,
-                        'color': color,
-                        'weight': style["weight"],
-                        'fillOpacity': style["fillOpacity"],
-                    },
-                    tooltip=name.replace("_", " ").title(),
-                ).add_to(m)
+                gdf = gpd.GeoDataFrame(
+                    gdf.drop(columns=[c for c in gdf.columns if c != "geometry"], errors="ignore"),
+                    geometry=gdf.geometry.simplify(tol, preserve_topology=True),
+                    crs=gdf.crs,
+                )
+                # Snap to 0.0001° grid (~11 m) to further reduce JSON size
+                gdf = gdf.set_precision(0.0001)
+                simplified_mb = len(gdf.to_json()) / 1024 / 1024
+                _log(f"  Simplified to ~{simplified_mb:.0f} MB", verbose)
+
+            geojson_str = gdf.to_json()
+            geojson_layer = folium.GeoJson(
+                geojson_str,
+                name=_format_layer_name(name),
+                style_function=lambda x, color=style["color"], weight=style["weight"], fill_opacity=style["fillOpacity"]: {
+                    'fillColor': color,
+                    'color': color,
+                    'weight': weight,
+                    'fillOpacity': fill_opacity,
+                },
+                tooltip=_format_layer_name(name),
+            )
+            geojson_layer.add_to(m)
+            _opacity_layers.append((_format_layer_name(name), geojson_layer.get_name(), 'vector', style["fillOpacity"]))
         else:
             # Handle raster data as image overlay
             _log(f"  Adding raster layer: {name}", verbose)
@@ -1296,13 +1789,14 @@ def _create_interactive_visualization_impl(
                 overlay = folium.raster_layers.ImageOverlay(
                     image=f"data:image/png;base64,{img_base64}",
                     bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-                    name=name.replace("_", " ").title(),
+                    name=_format_layer_name(name),
                     opacity=1.0,
                     interactive=True,
                     zindex=i + 10  # Above base maps
                 )
                 overlay.add_to(m)
-    
+                _opacity_layers.append((_format_layer_name(name), overlay.get_name(), 'raster', style["alpha"]))
+
     # Add a rectangle to show the target extent
     folium.Rectangle(
         bounds=[[ymin, xmin], [ymax, xmax]],
@@ -1312,9 +1806,6 @@ def _create_interactive_visualization_impl(
         fill_opacity=0.1,
         name="Target Extent"
     ).add_to(m)
-    
-    # Add layer control with groups
-    folium.LayerControl(collapsed=False).add_to(m)
     
     # Add fullscreen option
     folium.plugins.Fullscreen().add_to(m)
@@ -1338,56 +1829,144 @@ def _create_interactive_visualization_impl(
         # Check if this is a vector file
         if path.suffix.lower() == '.geojson' or path.suffix.lower() == '.json':
             style = _get_vector_style(name)
-            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{style["color"]};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {name.replace("_", " ").title()}</div>'
+            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{style["color"]};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {_format_layer_name(name)}</div>'
         else:
             with rasterio.open(path) as src:
                 data = src.read(1)
             style = _get_layer_style(name, data, i)
-            
+
             if style["solid_color"] is not None:
                 # Binary data - show solid color
                 r, g, b, a = style["solid_color"]
                 hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
-                legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{hex_color};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {name.replace("_", " ").title()}</div>'
+                legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{hex_color};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {_format_layer_name(name)}</div>'
             else:
-                # Categorical: show a compact labeled swatch list for values present in this layer
                 import src.geospatial_harmonizer as _self
+                # Only use the layer's own color_map — not the global DISCOVERED_LABELS,
+                # which persists from prior layers (e.g. FBFM40) and would incorrectly
+                # cause continuous layers (e.g. precipitation) to render as categorical.
                 color_map = style.get("color_map") or {}
-                labels_map = _self.DISCOVERED_LABELS or {}
-                unique_present = sorted(np.unique(data[data > 0]).tolist())
-                legend_html += f'<div style="margin:4px 0 2px;font-weight:bold;">{name.replace("_", " ").title()}</div>'
-                legend_html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;font-size:11px;">'
-                # Only show values that have a real label or a real color (skip unnamed grey entries)
-                named_present = [v for v in unique_present if v in color_map or labels_map.get(v, str(v)) != str(v)]
-                for v in named_present:
-                    label = labels_map.get(v, str(v))
-                    if v in color_map:
-                        r_c, g_c, b_c = color_map[v][0], color_map[v][1], color_map[v][2]
-                        bg = f"rgb({r_c},{g_c},{b_c})"
-                    else:
-                        bg = "#aaa"
-                    legend_html += (
-                        f'<div style="display:flex;align-items:center;gap:4px;">'
-                        f'<i style="background:{bg};width:12px;height:12px;display:inline-block;flex-shrink:0;border-radius:2px;"></i>'
-                        f'{label}</div>'
-                    )
-                legend_html += '</div>'
+                label_title = _format_layer_name(name)
+
+                if color_map:
+                    # Categorical data with a per-value color map — show labeled swatches
+                    labels_map = _self.DISCOVERED_LABELS or {}
+                    unique_present = sorted(np.unique(data[np.isfinite(data) & (data > 0)]).tolist())
+                    named_present = [v for v in unique_present if v in color_map or labels_map.get(v, str(v)) != str(v)]
+                    legend_html += f'<div style="margin:4px 0 2px;font-weight:bold;">{label_title}</div>'
+                    legend_html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;font-size:11px;">'
+                    for v in named_present:
+                        label = labels_map.get(v, str(v))
+                        if v in color_map:
+                            r_c, g_c, b_c = color_map[v][0], color_map[v][1], color_map[v][2]
+                            bg = f"rgb({r_c},{g_c},{b_c})"
+                        else:
+                            bg = "#aaa"
+                        legend_html += (
+                            f'<div style="display:flex;align-items:center;gap:4px;">'
+                            f'<i style="background:{bg};width:12px;height:12px;display:inline-block;flex-shrink:0;border-radius:2px;"></i>'
+                            f'{label}</div>'
+                        )
+                    legend_html += '</div>'
+                else:
+                    # Continuous data — show a gradient bar with min/max labels
+                    vmin = style.get("vmin") if style.get("vmin") is not None else np.nanmin(data)
+                    vmax = style.get("vmax") if style.get("vmax") is not None else np.nanmax(data)
+                    units = style.get("units", "")
+                    cmap_name = style.get("colormap", "viridis")
+                    # Approximate CSS gradient stops for common colormaps
+                    gradients = {
+                        "viridis":    "linear-gradient(to right, #440154, #31688e, #35b779, #fde725)",
+                        "terrain":    "linear-gradient(to right, #333399, #66b266, #d2a679, #ffffff)",
+                        "plasma":     "linear-gradient(to right, #0d0887, #7e03a8, #cc4778, #f89540, #f0f921)",
+                        "Blues":      "linear-gradient(to right, #f7fbff, #9ecae1, #4292c6, #084594)",
+                        "RdYlBu_r":  "linear-gradient(to right, #313695, #74add1, #ffffbf, #f46d43, #a50026)",
+                    }
+                    gradient = gradients.get(cmap_name, gradients["viridis"])
+                    units_str = f" ({units})" if units else ""
+                    legend_html += f'''
+                    <div style="margin:4px 0 2px;font-weight:bold;">{label_title}{units_str}</div>
+                    <div style="background:{gradient};height:12px;width:100%;border-radius:2px;margin-bottom:2px;"></div>
+                    <div style="display:flex;justify-content:space-between;font-size:10px;">
+                        <span>{vmin:.2f}</span><span>{vmax:.2f}</span>
+                    </div>'''
     
     legend_html += '</div>'
-    
+
     # Add the legend to the map
     m.get_root().html.add_child(folium.Element(legend_html))
-    
-    # Save the map
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    m.save(output_path)
-    
-    _log(f"Interactive visualization saved to: {output_path}", verbose)
-    
-    return output_path
+
+    # --- Per-layer toggle + opacity control panel ---
+    # Each layer gets a checkbox (show/hide) and, while checked, an opacity slider.
+    # Uses each layer's Leaflet JS variable name (from folium's get_name()).
+    opacity_html = '''
+    <div style="position:fixed; top:80px; right:10px; z-index:9999;
+                background:white; padding:10px 12px; border:2px solid grey;
+                border-radius:5px; font-size:12px; min-width:200px;
+                box-shadow:2px 2px 6px rgba(0,0,0,0.2);">
+      <b>Data Layers</b>
+    '''
+    for display_name, js_name, layer_type, init_fill_opacity in _opacity_layers:
+        if layer_type == 'vector':
+            # Apply opacity to both stroke and fill; preserve original fillOpacity ratio.
+            # Two variants: one uses `sl.value` (checkbox context), one uses `this.value` (slider context).
+            apply_from_slider = (
+                f"var op=this.value/100;"
+                f"{js_name}.setStyle({{opacity:op,fillOpacity:op*{init_fill_opacity}}});"
+            )
+            apply_from_chk = (
+                f"var op=sl.value/100;"
+                f"{js_name}.setStyle({{opacity:op,fillOpacity:op*{init_fill_opacity}}});"
+            )
+            hide_layer = f"{js_name}.setStyle({{opacity:0,fillOpacity:0}});"
+        else:
+            apply_from_slider = f"{js_name}.setOpacity(this.value/100);"
+            apply_from_chk   = f"{js_name}.setOpacity(sl.value/100);"
+            hide_layer       = f"{js_name}.setOpacity(0);"
+
+        # Checkbox onchange: show/hide the slider row and apply opacity or zero.
+        on_chk = (
+            f"var sl=document.getElementById('{js_name}_sl');"
+            f"var row=document.getElementById('{js_name}_row');"
+            f"row.style.display=this.checked?'flex':'none';"
+            f"if(this.checked){{{apply_from_chk}}}else{{{hide_layer}}}"
+        )
+        # Slider oninput: only apply if the checkbox is checked; always update label.
+        on_sl = (
+            f"if(document.getElementById('{js_name}_chk').checked){{{apply_from_slider}}}"
+            f"document.getElementById('{js_name}_lbl').textContent=this.value+'%';"
+        )
+        opacity_html += f'''
+      <div style="margin:6px 0 2px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="{js_name}_chk" checked style="cursor:pointer;"
+                 onchange="{on_chk}">
+          <label for="{js_name}_chk" style="flex:1;cursor:pointer;">{display_name}</label>
+        </div>
+        <div id="{js_name}_row" style="display:flex;align-items:center;gap:6px;padding-left:20px;margin-top:3px;">
+          <input type="range" id="{js_name}_sl" min="0" max="100" value="100"
+                 style="flex:1;cursor:pointer;" oninput="{on_sl}">
+          <span id="{js_name}_lbl" style="width:30px;text-align:right;font-size:11px;">100%</span>
+        </div>
+      </div>'''
+    opacity_html += '\n    </div>'
+    m.get_root().html.add_child(folium.Element(opacity_html))
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        m.save(str(output_path))
+        _log(f"Interactive visualization saved to: {output_path}", verbose)
+
+    return m
 
 
-def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
+def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], folium.Map | None]:
+    # Reset module-level color map state so workflows don't bleed into each other
+    # when multiple ExampleWorkflows run in the same process (e.g. in a notebook).
+    import src.geospatial_harmonizer as _self
+    _self.DISCOVERED_COLOR_MAP = None
+    _self.DISCOVERED_LABELS = None
+
     grid = build_grid_spec(
         target_crs=workflow.target_crs,
         target_extent=workflow.target_extent,
@@ -1442,8 +2021,43 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
                     _log(f"Loaded {len(labels_json)} labels from file", workflow.verbose)
                 continue
 
+            # Check if this is a STAC-sourced dataset
+            if dataset.is_stac:
+                source_file = download_stac_item(
+                    catalog_url=dataset.url,
+                    collection=dataset.stac_collection,
+                    asset_key=dataset.stac_asset,
+                    bbox=workflow.target_extent,
+                    output_dir=dataset_dir,
+                    datetime=dataset.stac_datetime,
+                    query=dataset.stac_query,
+                    verbose=workflow.verbose,
+                )
+            # Single-variable NetCDF via OPeNDAP (e.g. pre-computed VPD, tasmax, pr)
+            elif dataset.netcdf_variable and not dataset.secondary_url:
+                nc_path = dataset_dir / f"{dataset.name}_native.tif"
+                source_file = fetch_netcdf_seasonal_geotiff(
+                    url=dataset.url,
+                    variable=dataset.netcdf_variable,
+                    bbox=workflow.target_extent,
+                    output_path=nc_path,
+                    months=dataset.netcdf_months,
+                    verbose=workflow.verbose,
+                )
+            # Check if this is a derived climate variable (e.g. VPD from tasmax + rhsmin)
+            elif dataset.netcdf_variable and dataset.secondary_url and dataset.secondary_netcdf_variable:
+                vpd_path = dataset_dir / f"{dataset.name}_vpd_native.tif"
+                source_file = compute_vpd_geotiff(
+                    tasmax_url=dataset.url,
+                    rhsmin_url=dataset.secondary_url,
+                    bbox=workflow.target_extent,
+                    output_path=vpd_path,
+                    tasmax_var=dataset.netcdf_variable,
+                    rhsmin_var=dataset.secondary_netcdf_variable,
+                    verbose=workflow.verbose,
+                )
             # Check if URL is a WMS endpoint
-            if dataset.is_wms and dataset.data_type == "raster":
+            elif dataset.is_wms and dataset.data_type == "raster":
                 # Download from WMS with target extent
                 source_file = download_wms_coverage(
                     wms_url=dataset.url,
@@ -1542,7 +2156,11 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
             if dataset.data_type == "raster":
                 # If downloaded from ImageServer, it's already at target resolution
                 # Still need to ensure CRS matches
-                harmonize_raster(source_file, grid, output_path, workflow.verbose)
+                harmonize_raster(
+                    source_file, grid, output_path,
+                    resampling_method=dataset.resampling_method,
+                    verbose=workflow.verbose,
+                )
             elif dataset.data_type == "vector" and dataset.rasterize:
                 rasterize_vector_to_grid(
                     source_file,
@@ -1567,17 +2185,16 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> list[Path]:
             output_files.append(output_path)
             viz_inputs.append((dataset.name, output_path))
 
+    interactive_map = None
     if workflow.create_visualization and output_files:
         viz_path = workflow.output_dir / "harmonized_visualization.png"
         create_visualization(viz_inputs, viz_path, workflow.verbose)
-        
-        # Also create interactive HTML visualization
-        html_path = workflow.output_dir / "harmonized_visualization.html"
-        create_interactive_visualization(
+
+        interactive_map = create_interactive_visualization(
             viz_inputs,
-            html_path,
             workflow.target_extent,
-            workflow.verbose
+            output_path=workflow.output_dir / "harmonized_visualization.html",
+            verbose=workflow.verbose,
         )
 
-    return output_files
+    return output_files, interactive_map
