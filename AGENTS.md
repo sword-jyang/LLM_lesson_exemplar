@@ -91,9 +91,9 @@ Fill all placeholders from the script and conversation. Commit no placeholder te
 
 ## Datasets
 
-| Layer | Type | Source |
+| Layer | Type | URL |
 |---|---|---|
-<!-- One row per DatasetSpec defined in the script. -->
+<!-- One row per DatasetSpec. Include the exact download URL so the workflow is reproducible. -->
 
 **Target grid:** <TARGET_CRS> · extent <TARGET_EXTENT> · resolution <TARGET_RESOLUTION>
 

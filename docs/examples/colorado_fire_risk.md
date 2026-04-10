@@ -16,12 +16,12 @@ Colorado using `src/geospatial_harmonizer.py`.
 
 ## Datasets
 
-| Layer | Type | Source |
+| Layer | Type | URL |
 |---|---|---|
-| FBFM40 Fire Behavior Fuel Models | Raster (categorical) | Landfire 2024, direct ZIP download |
-| MACAv2 Winter Precipitation | Raster (continuous) | CCSM4 RCP8.5 Dec–Mar mean 2006–2099, OPeNDAP |
-| MTBS Burned Area Boundaries | Vector | USGS perimeter data |
-| Microsoft Building Footprints | Vector → rasterized | Microsoft, Colorado state file |
+| FBFM40 Fire Behavior Fuel Models | Raster (categorical) | `https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip` |
+| MACAv2 Winter Precipitation | Raster (continuous, OPeNDAP) | `http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc` |
+| MTBS Burned Area Boundaries | Vector | `https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip` |
+| Microsoft Building Footprints | Vector → rasterized | `https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Colorado.geojson.zip` |
 
 **Target grid:** EPSG:4326 · Colorado extent (-109.05, 36.99, -102.04, 41.01) · ~270 m (0.00243°)
 
