@@ -1,8 +1,14 @@
 # Data Catalog — known-good dataset URLs
 #
+# POLICY: Every URL in this file must pass tests/test_url_health.py.
+# If a URL starts failing the health check, remove the entry — do not add
+# health_check: skip to work around a failure. Only freely accessible URLs
+# (no API key required) belong here.
+#
 # Add a new entry each time a workflow uses a URL that successfully downloads
-# and harmonizes. Run scripts/sync_esiil_catalog.py to discover new candidates
-# from the ESIIL Data Library (https://cu-esiil.github.io/data-library/).
+# and harmonizes AND the URL passes the health check.
+# Run scripts/sync_esiil_catalog.py to discover new candidates from the
+# ESIIL Data Library (https://cu-esiil.github.io/data-library/).
 #
 # Fields:
 #   name       — human-readable dataset name
@@ -70,3 +76,139 @@ datasets:
     notes: >
       Categorical land cover raster for CONUS. Use resampling_method="nearest".
       Large download — clip to target extent. From ESIIL Data Library maka-sitomniya/NLCD.
+
+  - name: National Land Cover Database (NLCD) 2023
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2023_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest". Replace year in URL for other years (2001–2023).
+
+  - name: National Land Cover Database (NLCD) 2022
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2022_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: National Land Cover Database (NLCD) 2021
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2021_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: National Land Cover Database (NLCD) 2020
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2020_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: National Land Cover Database (NLCD) 2016
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2016_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: National Land Cover Database (NLCD) 2011
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2011_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: National Land Cover Database (NLCD) 2006
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2006_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: National Land Cover Database (NLCD) 2001
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2001_CU_C1V1.zip
+    notes: Categorical land cover raster for CONUS. Use resampling_method="nearest".
+
+  - name: EPA Uranium Mine Locations
+    type: vector
+    source: EPA
+    url: https://www.epa.gov/sites/default/files/2015-03/uld-ii_gis.zip
+    notes: Point/polygon locations of uranium mines in the US. From ESIIL Data Library hazards/Uranium_mines.
+
+  - name: Hansen Global Forest Change 2024 — Loss Year (50N 110W tile)
+    type: raster
+    source: Hansen / Google Earth Engine
+    url: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/Hansen_GFC-2024-v1.12_lossyear_50N_110W.tif
+    notes: >
+      Annual forest loss year raster. Replace tile (e.g. 50N_110W) with your region.
+      Multiple layers available: lossyear, treecover2000, gain, last, first, datamask.
+
+  - name: Hansen Global Forest Change 2024 — Tree Cover 2000 (50N 110W tile)
+    type: raster
+    source: Hansen / Google Earth Engine
+    url: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/Hansen_GFC-2024-v1.12_treecover2000_50N_110W.tif
+    notes: Percent tree canopy cover in year 2000. Continuous raster, use resampling_method="bilinear".
+
+  - name: Hansen Global Forest Change 2024 — Gain (50N 110W tile)
+    type: raster
+    source: Hansen / Google Earth Engine
+    url: https://storage.googleapis.com/earthenginepartners-hansen/GFC-2024-v1.12/Hansen_GFC-2024-v1.12_gain_50N_110W.tif
+    notes: Binary forest gain 2000–2012. Use resampling_method="nearest".
+
+  - name: USGS Watershed Boundary Dataset (WBD) — National
+    type: vector
+    source: USGS / USDA
+    url: https://prd-tnm.s3.amazonaws.com/StagedProducts/Hydrography/WBD/National/GDB/WBD_National_GDB.zip
+    notes: >
+      National hydrologic unit boundaries (HUC2–HUC12). Very large download (~2 GB).
+      Clip to target extent. From ESIIL Data Library maka-sitomniya/watershed_boundaries.
+
+  - name: NEON Field Site Metadata
+    type: vector
+    source: NEON / NSF
+    url: https://www.neonscience.org/sites/default/files/NEON_Field_Site_Metadata_20230309.csv
+    notes: >
+      CSV of NEON site locations and attributes. Tabular — load with pandas and
+      convert to GeoDataFrame using lat/lon columns. From ESIIL Data Library harmonization/neon_and_lter.
+
+  - name: Census TIGER American Indian / Alaska Native / Native Hawaiian Areas (AIANNH) 2020
+    type: vector
+    source: US Census Bureau
+    url: https://www2.census.gov/geo/tiger/TIGER2020/AIANNH/tl_2020_us_aiannh.zip
+    notes: Federally recognized tribal area boundaries. Shapefile inside ZIP. From ESIIL Data Library indian_country/aiannh.
+
+  - name: National Atlas of Indian Lands
+    type: vector
+    source: USGS National Atlas
+    url: https://prd-tnm.s3.amazonaws.com/StagedProducts/Small-scale/data/Boundaries/indlanp010g.shp_nt00968.tar.gz
+    notes: >
+      Shapefile of Indian lands boundaries (.tar.gz archive). From ESIIL Data Library
+      indian_country/national_atlas_of_indian_lands.
+
+  - name: Florida Foodweb Network
+    type: vector
+    source: NRVIS
+    url: https://nrvis.com/download/data/eco/eco-florida.zip
+    notes: >
+      Ecological network dataset (edge list). Tabular/graph data, not geospatial.
+      From ESIIL Data Library math/foodweb.
+
+  - name: Mammal Primate Association Network
+    type: vector
+    source: NRVIS
+    url: https://nrvis.com/download/data/dynamic/mammalia-primate-association.zip
+    notes: >
+      Dynamic mammal association network (edge list). Tabular/graph data, not geospatial.
+      From ESIIL Data Library math/mammal_primate_association.
+
+  - name: HOLC Redlining — National (2020 Census Tracts)
+    type: vector
+    source: American Panorama / Mapping Inequality
+    url: https://raw.githubusercontent.com/americanpanorama/Census_HOLC_Research/main/2020_Census_Tracts/Tracts_2020_HOLC.geojson
+    notes: >
+      HOLC neighborhood grades joined to 2020 census tracts. GeoJSON, keep as vector.
+      From ESIIL Data Library justice/redlining.
+
+  - name: HOLC Redlining — Philadelphia 1937
+    type: vector
+    source: Mapping Inequality / Richmond DSL
+    url: https://dsl.richmond.edu/panorama/redlining/static/downloads/geojson/PAPhiladelphia1937.geojson
+    notes: >
+      Historic HOLC redlining map for Philadelphia as GeoJSON. Keep as vector.
+      Replace city/state in URL for other cities. From ESIIL Data Library justice/redlining.

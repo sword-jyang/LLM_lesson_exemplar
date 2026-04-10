@@ -22,11 +22,14 @@ REQUEST_TIMEOUT = 20  # seconds
 
 
 def load_urls():
-    """Return list of (label, url) tuples from data_catalog.yml."""
+    """Return list of (label, url) tuples from data_catalog.yml.
+    Entries with health_check: skip are excluded."""
     with open(CATALOG) as f:
         catalog = yaml.safe_load(f)
     urls = []
     for entry in catalog.get("datasets", []):
+        if entry.get("health_check") == "skip":
+            continue
         urls.append((entry["name"], entry["url"]))
         if entry.get("labels_url"):
             urls.append((entry["name"] + " (labels)", entry["labels_url"]))
@@ -34,11 +37,20 @@ def load_urls():
 
 
 def check_url(url: str) -> tuple[bool, str]:
-    """Return (ok, message). Uses GET+stream for OPeNDAP, HEAD otherwise."""
-    method = "GET" if "dodsC" in url else "HEAD"
+    """Return (ok, message).
+    - OPeNDAP (dodsC): request .dds suffix — returns metadata without triggering a download
+    - Everything else: HEAD request
+    """
+    if "dodsC" in url:
+        # Strip any existing suffix and request .dds (dataset descriptor — lightweight metadata)
+        check_url_str = url.split("?")[0].rstrip("/") + ".dds"
+        method = "GET"
+    else:
+        check_url_str = url
+        method = "HEAD"
     try:
         r = requests.request(
-            method, url,
+            method, check_url_str,
             timeout=REQUEST_TIMEOUT,
             stream=True,
             headers={"User-Agent": "Mozilla/5.0"},

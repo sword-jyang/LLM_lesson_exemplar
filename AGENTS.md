@@ -173,11 +173,19 @@ PNG is generated), you MUST add any new datasets to `data_catalog.yml`:
 ```
 
 Rules:
+- **Only add URLs that pass `tests/test_url_health.py`.** A URL that fails the
+  health check does not belong in the catalog — remove it even if it worked in
+  the past. Sources go stale and the catalog must stay clean.
 - Do not add URLs that failed to download or produced corrupt outputs.
 - Do not duplicate existing entries — check the file before adding.
 - Include `labels_url` if a CSV was needed for correct visualization colors/labels.
 - Add a `notes` line if the dataset requires special handling (e.g. OPeNDAP
   variable name, ensemble member, rasterization decision).
+- No API keys: only add URLs that are freely accessible without authentication.
+
+If an existing entry starts returning errors in the health check, **remove it**
+from `data_catalog.yml`. Do not add `health_check: skip` to work around a
+failure — that defeats the purpose of the catalog.
 
 When a user asks for datasets on a topic (fire risk, drought, water quality, etc.),
 browse the ESIIL Data Library at https://cu-esiil.github.io/data-library/ for
@@ -188,8 +196,9 @@ To discover new candidate URLs from the ESIIL library, run:
 ```bash
 python scripts/sync_esiil_catalog.py
 ```
-This prints YAML candidates to stdout. Review them, set `type`, update `notes`,
-then add useful entries to `data_catalog.yml`.
+This prints YAML candidates to stdout. Review them, verify each URL passes the
+health check, set `type`, update `notes`, then add useful entries to
+`data_catalog.yml`.
 
 ---
 

@@ -41,8 +41,8 @@ SKIP_PATTERNS = (
 )
 
 
-def get_page_paths(mkdocs_url: str) -> list[str]:
-    """Parse the ESIIL mkdocs.yml nav and return all .md page paths."""
+def get_topic_paths(mkdocs_url: str) -> list[str]:
+    """Parse the ESIIL mkdocs.yml nav and return topic index .md page paths."""
     r = requests.get(mkdocs_url, timeout=15)
     r.raise_for_status()
     config = yaml.safe_load(r.text)
@@ -61,6 +61,25 @@ def get_page_paths(mkdocs_url: str) -> list[str]:
 
     walk(config.get("nav", []))
     return paths
+
+
+def get_dataset_paths(topic_paths: list[str]) -> list[str]:
+    """Follow links inside topic index pages to find individual dataset pages."""
+    dataset_paths: list[str] = []
+    for topic_path in topic_paths:
+        if not topic_path.startswith("topic/"):
+            continue
+        raw_url = f"{ESIIL_RAW_BASE}/{topic_path}"
+        try:
+            r = requests.get(raw_url, timeout=10)
+            if r.status_code != 200:
+                continue
+            # Links look like: [Name](../hazards/Air_data/Air_data.md)
+            for link in re.findall(r'\]\(\.\./([^)]+\.md)\)', r.text):
+                dataset_paths.append(link)
+        except Exception as e:
+            print(f"  SKIP topic {topic_path}: {e}", file=sys.stderr)
+    return dataset_paths
 
 
 def extract_data_urls(md_text: str) -> set[str]:
@@ -85,12 +104,14 @@ def main() -> int:
 
     print(f"Fetching ESIIL nav from {ESIIL_MKDOCS} …", file=sys.stderr)
     try:
-        paths = get_page_paths(ESIIL_MKDOCS)
+        topic_paths = get_topic_paths(ESIIL_MKDOCS)
     except Exception as e:
         print(f"ERROR fetching ESIIL mkdocs.yml: {e}", file=sys.stderr)
         return 1
 
-    print(f"Found {len(paths)} pages — scanning for data URLs …", file=sys.stderr)
+    print(f"Found {len(topic_paths)} topic pages — discovering dataset pages …", file=sys.stderr)
+    paths = get_dataset_paths(topic_paths)
+    print(f"Found {len(paths)} dataset pages — scanning for data URLs …", file=sys.stderr)
 
     new_entries: list[dict] = []
     seen_urls: set[str] = set(existing_urls)
