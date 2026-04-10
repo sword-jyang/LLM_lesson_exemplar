@@ -61,6 +61,97 @@ When a scientist asks you to analyze new data:
 
 ---
 
+## Documentation Generation Protocol for New Analyses
+
+Every time you create a new workflow in `workflows/<project_name>/` and run it,
+you MUST create `docs/workflows/<project_name>.md` before the task is complete.
+
+The hook in `hooks.py` automatically handles:
+- Copying the PNG from `workflows/<project_name>/output/` into `docs/assets/workflows/<project_name>/` at build time
+- Injecting the page into the website nav under a "Workflows" section
+
+You only need to create the Markdown file. Do NOT manually edit `mkdocs.yml`.
+
+### Template for `docs/workflows/<project_name>.md`
+
+Fill all placeholders from the script and conversation. Commit no placeholder text (`<...>`).
+
+```markdown
+# <Project Name>
+
+<One-sentence description of the scientific question this workflow addresses.>
+
+---
+
+## Prompt
+
+> "<Exact user prompt or request that produced this workflow.>"
+
+---
+
+## Datasets
+
+| Layer | Type | Source |
+|---|---|---|
+<!-- One row per DatasetSpec defined in the script. -->
+
+**Target grid:** <TARGET_CRS> · extent <TARGET_EXTENT> · resolution <TARGET_RESOLUTION>
+
+---
+
+## What Was Harmonized
+
+<!-- 2–4 bullets: resampling choices, vector/raster decisions, notable preprocessing. -->
+
+---
+
+## Result
+
+![Harmonized visualization for <project_name>](../assets/workflows/<project_name>/harmonized_visualization.png)
+
+---
+
+## Reproduce It
+
+From the repo root:
+
+\```bash
+python workflows/<project_name>/<script_name>.py
+\```
+
+Outputs are saved to `workflows/<project_name>/output/`.
+
+---
+
+## Source
+
+Script: `workflows/<project_name>/<script_name>.py`
+```
+
+### How the PNG gets to the website
+
+The hook in `hooks.py` runs `on_pre_build` and copies
+`workflows/<project_name>/output/harmonized_visualization.png` →
+`docs/assets/workflows/<project_name>/harmonized_visualization.png` at every
+`mkdocs build` or `mkdocs serve`. The file in `docs/assets/` is never committed
+to git — it is always regenerated from the canonical output directory.
+
+The image path in the Markdown file must be:
+```
+../assets/workflows/<project_name>/harmonized_visualization.png
+```
+(relative from `docs/workflows/` up one level to `docs/`, then into `assets/`).
+
+### Verification checklist
+
+- [ ] `docs/workflows/<project_name>.md` exists with no placeholder text
+- [ ] The Prompt section contains the exact user request
+- [ ] Dataset table has one row per `DatasetSpec` in the script
+- [ ] Image path matches `../assets/workflows/<project_name>/harmonized_visualization.png`
+- [ ] `mkdocs.yml` was NOT manually edited (hook handles the nav)
+
+---
+
 ## Testing Policy
 
 - Assume `tests/` may exist before a full testing framework is defined.

@@ -63,3 +63,15 @@ rsconnect/
 
 # macOS
 .DS_Store
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# MkDocs build output
+site/

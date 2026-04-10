@@ -6,10 +6,16 @@ repo_name: "CU-ESIIL/LLM_lesson_exemplar"
 repo_url: "https://github.com/CU-ESIIL/LLM_lesson_exemplar"
 edit_uri: "edit/main/docs/"
 
+hooks:
+  - hooks.py
+
 nav:
   - Site:
       - Home: index.md
-      - Examples: examples.md
+  - Examples:
+      - Colorado Fire Risk: examples/colorado_fire_risk.md
+  - Reference:
+      - API Reference: examples.md
 
 theme:
   name: material
