@@ -85,7 +85,8 @@ Fill all placeholders from the script and conversation. Commit no placeholder te
 
 ## Prompt
 
-> "<Exact user prompt or request that produced this workflow.>"
+> "<Exact user prompt or request that produced this workflow, including the
+> dataset URLs provided by the user.>"
 
 ---
 

@@ -8,9 +8,18 @@ Colorado using `src/geospatial_harmonizer.py`.
 ## Prompt
 
 > "Download these datasets, harmonize them to EPSG:4326 over Colorado, and
-> generate a map. Use the FBFM40 fuel model raster, MACAv2 winter precipitation
-> via OPeNDAP, MTBS burned area boundaries as vector, and Microsoft building
-> footprints rasterized to presence/absence."
+> generate a map:
+>
+> - FBFM40 fuel models (raster, categorical, `resampling_method="nearest"`):
+>   `https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip`
+>   Use this CSV for both visualization colors (R, G, B columns) and legend labels:
+>   `https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv`
+> - MACAv2 winter precipitation via OPeNDAP (raster, continuous, variable `precipitation`, months Dec–Mar):
+>   `http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc`
+> - MTBS burned area boundaries (vector, do not rasterize):
+>   `https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip`
+> - Microsoft building footprints (vector, rasterize to presence/absence):
+>   `https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Colorado.geojson.zip`"
 
 ---
 
