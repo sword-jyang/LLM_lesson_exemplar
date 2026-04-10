@@ -1,0 +1,72 @@
+# Data Catalog — known-good dataset URLs
+#
+# Add a new entry each time a workflow uses a URL that successfully downloads
+# and harmonizes. Run scripts/sync_esiil_catalog.py to discover new candidates
+# from the ESIIL Data Library (https://cu-esiil.github.io/data-library/).
+#
+# Fields:
+#   name       — human-readable dataset name
+#   type       — raster | vector
+#   source     — organization or service name
+#   url        — direct download or OPeNDAP endpoint
+#   labels_url — optional CSV with VALUE, R, G, B, label columns for legend
+#   notes      — format, resampling choice, gotchas (one or two sentences)
+
+datasets:
+
+  # ── Colorado Fire Risk Example ──────────────────────────────────────────────
+
+  - name: FBFM40 Fire Behavior Fuel Models 2024
+    type: raster
+    source: Landfire
+    url: https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip
+    labels_url: https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv
+    notes: >
+      Categorical raster (Scott & Burgan 40 fuel models). Use resampling_method="nearest".
+      ZIP contains a .clr color map; labels_url CSV provides VALUE, R, G, B, and label
+      columns for both visualization colors and legend names.
+
+  - name: MACAv2 Winter Precipitation CCSM4 RCP8.5 2006-2099
+    type: raster
+    source: Northwest Knowledge Network THREDDS
+    url: http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
+    notes: >
+      OPeNDAP endpoint — use netcdf_variable="precipitation" and netcdf_months=[12,1,2,3]
+      for Dec–Mar winter mean. Ensemble member r6i1p1 is CCSM4-specific; verify for
+      other models via the THREDDS catalog XML.
+
+  - name: MTBS Burned Area Boundaries
+    type: vector
+    source: USGS
+    url: https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip
+    notes: >
+      Fire perimeter polygons for the contiguous US. Keep as vector (rasterize=False).
+      Clip to your target extent to reduce size before analysis.
+
+  - name: Microsoft Building Footprints — Colorado
+    type: vector
+    source: Microsoft
+    url: https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Colorado.geojson.zip
+    notes: >
+      Large file (~700 MB). Rasterize to presence/absence (rasterize=True, burn_value=1).
+      Automatically simplified before HTML map embedding due to >50 MB threshold.
+
+  # ── ESIIL Data Library ───────────────────────────────────────────────────────
+  # Source: https://cu-esiil.github.io/data-library/
+  # Run scripts/sync_esiil_catalog.py to discover additional candidates.
+
+  - name: EPA Air Quality Index by County 2022
+    type: vector
+    source: EPA Air Quality System (AQS)
+    url: https://aqs.epa.gov/aqsweb/airdata/annual_aqi_by_county_2022.zip
+    notes: >
+      Annual AQI summary by county (CSV inside ZIP). Tabular data — join to
+      county boundaries for spatial analysis. From ESIIL Data Library hazards/Air_data.
+
+  - name: National Land Cover Database (NLCD) 2024
+    type: raster
+    source: MRLC / USGS
+    url: https://www.mrlc.gov/downloads/sciweb1/shared/mrlc/data-bundles/Annual_NLCD_LndCov_2024_CU_C1V1.zip
+    notes: >
+      Categorical land cover raster for CONUS. Use resampling_method="nearest".
+      Large download — clip to target extent. From ESIIL Data Library maka-sitomniya/NLCD.

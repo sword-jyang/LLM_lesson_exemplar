@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+
+  # ── Core tests — blocks the push on failure ──────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Smoke test — library imports
+        run: pytest tests/test_import.py -v
+
+      - name: Doc page lint — no placeholder text
+        run: pytest tests/test_doc_pages.py -v
+
+      - name: Harmonization correctness
+        run: pytest tests/test_harmonization.py -v
+
+      - name: MkDocs build
+        run: mkdocs build --strict --clean
+
+  # ── URL health — never blocks the push ───────────────────────────────────────
+  url-health:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyyaml requests pytest
+
+      - name: Check catalog URLs
+        run: pytest tests/test_url_health.py -v -s

@@ -153,6 +153,46 @@ The image path in the Markdown file must be:
 
 ---
 
+## Data Catalog Protocol
+
+`data_catalog.yml` at the repo root is a library of known-good dataset URLs.
+It is seeded with the Colorado fire risk example datasets and grows as new
+workflows are created.
+
+Every time a workflow runs successfully (URLs download, harmonization completes,
+PNG is generated), you MUST add any new datasets to `data_catalog.yml`:
+
+```yaml
+  - name: <Human-readable dataset name>
+    type: raster  # or vector
+    source: <Organization / service name>
+    url: <direct download or OPeNDAP URL>
+    labels_url: <optional — CSV with VALUE, R, G, B, label columns>
+    notes: >
+      <One or two sentences: format, resampling choice, gotchas.>
+```
+
+Rules:
+- Do not add URLs that failed to download or produced corrupt outputs.
+- Do not duplicate existing entries — check the file before adding.
+- Include `labels_url` if a CSV was needed for correct visualization colors/labels.
+- Add a `notes` line if the dataset requires special handling (e.g. OPeNDAP
+  variable name, ensemble member, rasterization decision).
+
+When a user asks for datasets on a topic (fire risk, drought, water quality, etc.),
+browse the ESIIL Data Library at https://cu-esiil.github.io/data-library/ for
+relevant datasets and working code examples. If you successfully download and
+harmonize a dataset found there, add the URL to `data_catalog.yml`.
+
+To discover new candidate URLs from the ESIIL library, run:
+```bash
+python scripts/sync_esiil_catalog.py
+```
+This prints YAML candidates to stdout. Review them, set `type`, update `notes`,
+then add useful entries to `data_catalog.yml`.
+
+---
+
 ## Testing Policy
 
 - Assume `tests/` may exist before a full testing framework is defined.
