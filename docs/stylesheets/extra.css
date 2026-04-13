@@ -84,13 +84,14 @@
 /* Primary — gradient Accent Blue → Accent Green */
 .md-button--primary {
   background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green));
-  border-color: transparent;
+  border: none;
   color: #ffffff;
 }
 
 .md-button--primary:hover,
 .md-button--primary:focus {
   background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green));
+  border: none;
   color: #ffffff;
   filter: brightness(1.08);
   transform: translateY(-1px);
