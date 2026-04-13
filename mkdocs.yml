@@ -20,7 +20,7 @@ nav:
 theme:
   name: material
   logo: assets/esiil_content/esiil_oasis_logo.png
-  favicon: assets/esiil_content/favicon.ico
+  favicon: assets/esiil_content/favicon.png
   custom_dir: docs/overrides
   palette:
     - scheme: default
