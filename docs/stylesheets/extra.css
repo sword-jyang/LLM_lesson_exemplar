@@ -23,11 +23,11 @@
 
 /* ── Typography — ESIIL scale ────────────────────────────────────────────── */
 
-/* H1 Banner — 3.5rem */
+/* H1 Banner — 3.5rem, bold, body text (near-black) */
 .md-typeset h1 {
   font-size: 3.5rem;
   font-weight: 700;
-  color: var(--esiil-primary-blue);
+  color: var(--esiil-body-text);
   margin-bottom: 0.5rem;
 }
 
@@ -52,14 +52,14 @@
   color: var(--esiil-body-text);
 }
 
-/* H5 Misc Bolded Titles — 1.125rem */
+/* H5 Misc Bolded Titles — 1.125rem, body text */
 .md-typeset h5 {
   font-size: 1.125rem;
   font-weight: 700;
   color: var(--esiil-body-text);
 }
 
-/* Body text */
+/* Body text — 1rem */
 .md-typeset {
   color: var(--esiil-body-text);
   font-size: 1rem;
@@ -72,57 +72,40 @@
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
+/* Style guide: gradient 90deg Accent Blue → Accent Green, bold 700,
+   padding .5rem 2.5rem, text in body-text (black). All buttons use this. */
 
-/* All buttons — rounded, bold, ESIIL padding */
-.md-button {
+.md-button,
+.md-button--primary {
+  background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green)) !important;
+  border: none !important;
+  outline: none;
   border-radius: 999px;
+  color: var(--esiil-body-text) !important;
   font-weight: 700;
   padding: 0.5rem 2.5rem;
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-/* Primary — gradient Accent Blue → Accent Green */
-.md-button--primary {
-  background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green)) !important;
-  border: none !important;
-  outline: none;
-  color: #ffffff !important;
-}
-
+.md-button:hover,
+.md-button:focus,
 .md-button--primary:hover,
 .md-button--primary:focus {
   background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green)) !important;
   border: none !important;
   outline: none;
-  color: #ffffff !important;
+  color: var(--esiil-body-text) !important;
   filter: brightness(1.08);
   transform: translateY(-1px);
   box-shadow: 0 0.3rem 0.9rem rgba(66, 188, 220, 0.35);
 }
 
-/* Secondary */
-.md-button:not(.md-button--primary) {
-  border: 2px solid var(--esiil-primary-blue);
-  color: var(--esiil-primary-blue);
-  background: transparent;
-}
-
-.md-button:not(.md-button--primary):hover,
-.md-button:not(.md-button--primary):focus {
-  background: var(--esiil-gray);
-  color: var(--esiil-primary-blue);
-  transform: translateY(-1px);
-  box-shadow: 0 0.3rem 0.9rem rgba(35, 74, 101, 0.18);
-}
-
 /* ── Navigation ──────────────────────────────────────────────────────────── */
 
-/* Nav bar background already set via --md-primary-fg-color; ensure text readable */
 .md-header {
   background-color: var(--esiil-primary-blue);
 }
 
-/* Active nav link underline */
 .md-nav__link--active,
 .md-nav__link:is(:focus, :hover) {
   color: var(--esiil-accent-blue);
