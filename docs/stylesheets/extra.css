@@ -72,32 +72,33 @@
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
-/* Style guide: gradient 90deg Accent Blue → Accent Green, bold 700,
-   padding .5rem 2.5rem, text in body-text (black). All buttons use this. */
+/* Matched from esiil.org CSS:
+   default  → left-to-right  #42BCDC 0 % → #47BF7F 60 %  (black text)
+   hover    → right-to-left  #007135 0 % → #234A65 100%  (white text) */
 
 .md-button,
 .md-button--primary {
-  background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green)) !important;
+  background: linear-gradient(to right, #42BCDC 0%, #47BF7F 60%) !important;
   border: none !important;
+  border-radius: 0 !important;
   outline: none;
-  border-radius: 999px;
   color: var(--esiil-body-text) !important;
-  font-weight: 700;
+  font-weight: 700 !important;
   padding: 0.5rem 2.5rem;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  text-transform: uppercase;
+  transition: background 0.5s ease, color 0.5s ease;
 }
 
 .md-button:hover,
 .md-button:focus,
 .md-button--primary:hover,
 .md-button--primary:focus {
-  background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green)) !important;
+  background: linear-gradient(to left, #007135 0%, #234A65 100%) !important;
   border: none !important;
+  border-radius: 0 !important;
   outline: none;
-  color: var(--esiil-body-text) !important;
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  box-shadow: 0 0.3rem 0.9rem rgba(66, 188, 220, 0.35);
+  color: #ffffff !important;
+  text-decoration: none;
 }
 
 /* ── Navigation ──────────────────────────────────────────────────────────── */
