@@ -1,34 +1,138 @@
-/* Central extension point for lightweight, reusable visual tweaks. */
+/* ESIIL Brand — style guide implementation */
 
+/* ── Color tokens ────────────────────────────────────────────────────────── */
 :root {
-  --oasis-accent: #135d7f;
+  --esiil-primary-blue:  #234A65;
+  --esiil-accent-blue:   #42BCDC;
+  --esiil-accent-green:  #007135;
+  --esiil-body-text:     #161A19;
+  --esiil-gray:          #E3E3E3;
+
+  /* Override Material theme palette */
+  --md-primary-fg-color:              #234A65;
+  --md-primary-fg-color--light:       #42BCDC;
+  --md-primary-fg-color--dark:        #1a3650;
+  --md-primary-bg-color:              #ffffff;
+  --md-primary-bg-color--light:       rgba(255, 255, 255, 0.7);
+  --md-accent-fg-color:               #42BCDC;
+  --md-accent-fg-color--transparent:  rgba(66, 188, 220, 0.1);
+  --md-accent-bg-color:               #ffffff;
+  --md-typeset-color:                 #161A19;
+  --md-typeset-a-color:               #234A65;
 }
 
-/* Keep homepage hero content a bit more breathable. */
-.md-content h1 {
+/* ── Typography — ESIIL scale ────────────────────────────────────────────── */
+
+/* H1 Banner — 3.5rem */
+.md-typeset h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  color: var(--esiil-primary-blue);
   margin-bottom: 0.5rem;
 }
 
-.md-content > p:first-of-type {
+/* H2 Section Titles — 2.5rem, Primary Blue */
+.md-typeset h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--esiil-primary-blue);
+}
+
+/* H3 Section Subtitles — 1.5rem, Accent Blue */
+.md-typeset h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--esiil-accent-blue);
+}
+
+/* H4 Card Titles — 1.5rem, body text */
+.md-typeset h4 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--esiil-body-text);
+}
+
+/* H5 Misc Bolded Titles — 1.125rem */
+.md-typeset h5 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--esiil-body-text);
+}
+
+/* Body text */
+.md-typeset {
+  color: var(--esiil-body-text);
+  font-size: 1rem;
+}
+
+/* Lead paragraph on home page */
+.md-content > .md-typeset > p:first-of-type {
   font-size: 1.05rem;
   max-width: 68ch;
 }
 
-/* Subtle polish for Material buttons used across docs. */
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+/* All buttons — rounded, bold, ESIIL padding */
 .md-button {
   border-radius: 999px;
+  font-weight: 700;
+  padding: 0.5rem 2.5rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-.oasis-hover-button {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+/* Primary — gradient Accent Blue → Accent Green */
+.md-button--primary {
+  background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green));
+  border-color: transparent;
+  color: #ffffff;
 }
 
-.oasis-hover-button:hover {
+.md-button--primary:hover,
+.md-button--primary:focus {
+  background: linear-gradient(90deg, var(--esiil-accent-blue), var(--esiil-accent-green));
+  color: #ffffff;
+  filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 0.3rem 0.9rem rgba(19, 93, 127, 0.22);
+  box-shadow: 0 0.3rem 0.9rem rgba(66, 188, 220, 0.35);
 }
 
-/* Reusable responsive embed wrapper for iframes and maps. */
+/* Secondary */
+.md-button:not(.md-button--primary) {
+  border: 2px solid var(--esiil-primary-blue);
+  color: var(--esiil-primary-blue);
+  background: transparent;
+}
+
+.md-button:not(.md-button--primary):hover,
+.md-button:not(.md-button--primary):focus {
+  background: var(--esiil-gray);
+  color: var(--esiil-primary-blue);
+  transform: translateY(-1px);
+  box-shadow: 0 0.3rem 0.9rem rgba(35, 74, 101, 0.18);
+}
+
+/* ── Navigation ──────────────────────────────────────────────────────────── */
+
+/* Nav bar background already set via --md-primary-fg-color; ensure text readable */
+.md-header {
+  background-color: var(--esiil-primary-blue);
+}
+
+/* Active nav link underline */
+.md-nav__link--active,
+.md-nav__link:is(:focus, :hover) {
+  color: var(--esiil-accent-blue);
+}
+
+/* ── Cards (grid cards extension) ───────────────────────────────────────── */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > ol > li {
+  border-top: 3px solid var(--esiil-accent-blue);
+  border-radius: 0.25rem;
+}
+
+/* ── Reusable embed wrapper ──────────────────────────────────────────────── */
 .oasis-embed {
   position: relative;
   width: 100%;

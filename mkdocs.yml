@@ -22,6 +22,10 @@ theme:
   logo: assets/esiil_content/esiil_oasis_logo.png
   favicon: assets/esiil_content/favicon.ico
   custom_dir: docs/overrides
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
   features:
     - navigation.sections
     - navigation.top
