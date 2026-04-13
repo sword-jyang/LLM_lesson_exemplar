@@ -79,6 +79,7 @@
 .md-button,
 .md-button--primary {
   background: linear-gradient(to right, #42BCDC 0%, #47BF7F 60%) !important;
+  background-size: 200% auto !important;
   border: none !important;
   border-radius: 0 !important;
   outline: none;
