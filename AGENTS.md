@@ -48,6 +48,21 @@ When a scientist asks you to analyze new data:
 - Update related docs when behavior, workflows, or outputs change.
 - Preserve existing structure and historical context.
 - Do not perform destructive rewrites unless explicitly requested.
+- Record each harmonization run in `PROMPT_ACTION_LOG.md`.
+
+---
+
+## Prompt and Action Logging
+
+- `PROMPT_ACTION_LOG.md` is required project memory for all harmonization activity.
+- After every successful harmonization, append a new dated entry with:
+  - the user's original prompt (verbatim or as close as possible),
+  - the files and folders inspected,
+  - the actions taken and key decisions made per dataset,
+  - any verification performed,
+  - open questions, caveats, or follow-up needs.
+- Keep entries factual and chronological.
+- Preserve the user's exact wording in the Prompt field — it is the reproducible record of what was requested.
 
 ---
 
@@ -516,6 +531,7 @@ The agent MUST execute:
 6. Handle vector conversion if needed
 7. Save outputs
 8. Generate visualization
+9. Append an entry to `PROMPT_ACTION_LOG.md`
 
 ---
 
@@ -540,6 +556,12 @@ The agent MUST execute:
   ```
   harmonized_visualization.png
   ```
+
+### Prompt Action Log
+
+After every successful harmonization, append a new entry to `PROMPT_ACTION_LOG.md`
+following the format and rules in the **Prompt and Action Logging** section above.
+See `PROMPT_ACTION_LOG.md` for a worked example (the Colorado fire risk entry).
 
 ---
 
