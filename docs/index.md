@@ -2,7 +2,7 @@
 
 A template for using large language models to harmonize environmental science datasets from user-provided URLs.
 
-[See Examples](examples.md){ .md-button .md-button--primary }
+[See Example](examples.md){ .md-button .md-button--primary }
 [View Repository](https://github.com/CU-ESIIL/LLM_lesson_exemplar){ .md-button }
 
 <div class="grid cards" markdown>
