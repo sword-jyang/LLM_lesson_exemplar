@@ -326,6 +326,40 @@ Always set `output_dir=Path(__file__).parent / "output"` in new scripts.
 
 ---
 
+### Required Script Header
+
+Every workflow script MUST include this bootstrap before importing from `src/`,
+so the script runs correctly regardless of the user's working directory:
+
+```python
+import sys
+from pathlib import Path
+
+# Add repo root to sys.path so `src` is importable regardless of working directory
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from src.geospatial_harmonizer import (
+    DatasetSpec,
+    ExampleWorkflow,
+    run_harmonization_example,
+)
+```
+
+Without this header, `from src.geospatial_harmonizer import ...` only works when
+the user happens to run from the repo root with `src/` on `PYTHONPATH`. With it,
+`python workflows/my_project/my_script.py` works from anywhere.
+
+**Path depth:** `Path(__file__).parent.parent.parent` resolves to the repo root
+for both reference examples (`examples/<topic>/<script>.py`) and user workflows
+(`workflows/<project>/<script>.py`) — both are exactly three levels deep. If a
+script is placed at a different depth, adjust the number of `.parent` calls so
+the path resolves to the repo root.
+
+The Colorado reference example uses this pattern — see
+`examples/colorado_fire_risk/colorado_harmonization.py`.
+
+---
+
 ### Reproducibility Requirements
 
 The agent MUST:
