@@ -30,8 +30,11 @@ Outputs will automatically land in `workflows/my_project_name/output/`.
 import sys
 from pathlib import Path
 
-# Add repo root to sys.path so `src` is importable regardless of working directory
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Walk up to find the repo root (dir containing src/geospatial_harmonizer.py).
+# Depth-agnostic — works regardless of how nested this script is.
+_repo_root = next(p for p in Path(__file__).resolve().parents
+                  if (p / "src" / "geospatial_harmonizer.py").exists())
+sys.path.insert(0, str(_repo_root))
 
 from src.geospatial_harmonizer import DatasetSpec, ExampleWorkflow, run_harmonization_example
 

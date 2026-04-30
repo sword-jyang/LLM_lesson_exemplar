@@ -1157,8 +1157,22 @@ def _create_binary_mask(data: np.ndarray) -> np.ndarray:
     return data
 
 
-def create_visualization(outputs: list[tuple[str, Path]], output_path: Path, verbose: bool = True) -> Path | None:
-    """Create a static PNG visualization with subplots for each layer."""
+# Filename contract — the website build hook (hooks.py) and docs/workflows/<name>.md
+# template both expect these exact filenames. Do NOT change them or the workflow's
+# image silently fails to appear on the site. Pass output_dir to the public APIs;
+# the filenames are constructed internally so callers can't accidentally diverge.
+HARMONIZED_VIZ_PNG = "harmonized_visualization.png"
+HARMONIZED_VIZ_HTML = "harmonized_visualization.html"
+
+
+def create_visualization(outputs: list[tuple[str, Path]], output_dir: Path, verbose: bool = True) -> Path | None:
+    """Create a static PNG visualization with subplots for each layer.
+
+    The filename is hardcoded to ``harmonized_visualization.png`` (see
+    HARMONIZED_VIZ_PNG above). Pass the project's ``output_dir``; the function
+    writes the PNG inside it.
+    """
+    output_path = output_dir / HARMONIZED_VIZ_PNG
     try:
         return _create_visualization_impl(outputs, output_path, verbose)
     except Exception as e:
@@ -1584,7 +1598,7 @@ def _get_vector_style(name: str) -> dict:
 def create_interactive_visualization(
     outputs: list[tuple[str, Path]],
     target_extent: tuple[float, float, float, float],
-    output_path: Path | None = None,
+    output_dir: Path | None = None,
     verbose: bool = True
 ) -> folium.Map | None:
     """Create an interactive folium map visualization.
@@ -1592,8 +1606,10 @@ def create_interactive_visualization(
     Args:
         outputs: List of (name, path) tuples for each harmonized layer
         target_extent: Bounding box (xmin, xmax, ymin, ymax) for the map view
-        output_path: Optional path to save an HTML file. If None, the map is
-            returned for inline display (e.g. in a Jupyter notebook).
+        output_dir: Optional directory in which to save the HTML map. If
+            provided, the map is written to ``<output_dir>/harmonized_visualization.html``
+            (filename is hardcoded — see HARMONIZED_VIZ_HTML). If None, the
+            map is returned for inline display (e.g. in a Jupyter notebook).
         verbose: Print progress messages
 
     Returns:
@@ -1603,6 +1619,7 @@ def create_interactive_visualization(
         _log("Folium not available, skipping interactive visualization", verbose)
         return None
 
+    output_path = (output_dir / HARMONIZED_VIZ_HTML) if output_dir is not None else None
     try:
         return _create_interactive_visualization_impl(outputs, target_extent, output_path, verbose)
     except Exception as e:
@@ -2187,14 +2204,35 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
 
     interactive_map = None
     if workflow.create_visualization and output_files:
-        viz_path = workflow.output_dir / "harmonized_visualization.png"
-        create_visualization(viz_inputs, viz_path, workflow.verbose)
-
+        # Filenames are hardcoded inside create_visualization /
+        # create_interactive_visualization (see HARMONIZED_VIZ_PNG / _HTML)
+        # so the website build hook can find them.
+        create_visualization(viz_inputs, workflow.output_dir, workflow.verbose)
         interactive_map = create_interactive_visualization(
             viz_inputs,
             workflow.target_extent,
-            output_path=workflow.output_dir / "harmonized_visualization.html",
+            output_dir=workflow.output_dir,
             verbose=workflow.verbose,
         )
 
+    _print_post_run_checklist(workflow.name, workflow.verbose)
     return output_files, interactive_map
+
+
+def _print_post_run_checklist(project_name: str, verbose: bool) -> None:
+    """Print a checklist of required follow-up actions after a workflow runs.
+
+    AGENTS.md mandates several housekeeping steps (catalog updates, doc page,
+    PROMPT_ACTION_LOG entry) that no automated test enforces. Printing them
+    at end-of-run gives a weak LLM agent a final, unmissable nudge — even if
+    they ignored the same instructions in AGENTS.md.
+    """
+    if not verbose:
+        return
+    print()
+    print("─" * 72)
+    print("✅ Harmonization complete. Required follow-up before declaring done:")
+    print(f"   [ ] Append a new entry to PROMPT_ACTION_LOG.md (project: {project_name!r})")
+    print(f"   [ ] Add any newly used dataset URLs to data_catalog.yml")
+    print(f"   [ ] Create docs/workflows/{project_name}.md from the AGENTS.md template")
+    print("─" * 72)

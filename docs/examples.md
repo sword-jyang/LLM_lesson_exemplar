@@ -148,13 +148,18 @@ Reprojects and resamples a raster to match the target grid.
 
 Rasterizes vector geometries onto the target grid.
 
-### `create_visualization(outputs, output_path, verbose)`
+### `create_visualization(outputs, output_dir, verbose)`
 
-Creates a multi-panel matplotlib visualization of harmonized outputs.
+Creates a multi-panel matplotlib visualization of harmonized outputs. Saves to
+`<output_dir>/harmonized_visualization.png` — the filename is hardcoded so the
+website build hook can find it.
 
-### `create_interactive_visualization(outputs, target_extent, output_path, verbose)`
+### `create_interactive_visualization(outputs, target_extent, output_dir=None, verbose=True)`
 
 Creates a Folium HTML map with per-layer toggle checkboxes and opacity sliders.
+If `output_dir` is given, saves to `<output_dir>/harmonized_visualization.html`
+(filename hardcoded). If `output_dir` is None, returns the map without saving
+(useful for inline display in Jupyter).
 
 ### `run_harmonization_example(workflow)`
 

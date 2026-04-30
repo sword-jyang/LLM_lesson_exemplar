@@ -30,6 +30,29 @@
 #   url_template        — templated only: URL with {placeholder}; pair with variants
 #   variants            — templated only: list of substitution values
 #
+# ── Canonical topic vocabulary ─────────────────────────────────────────────
+# Use ONLY tags from this list when adding or editing entries. Reusing the
+# established tags (rather than inventing variants like 'wildfire' vs 'fire'
+# or 'land_cover' vs 'land-cover') keeps grep-by-topic reliable. Convention:
+# lowercase, kebab-case, singular preferred. Add a new tag only if no
+# existing one fits — and update this list when you do.
+#
+#   Climate & weather:    climate, weather, reanalysis, observed, projections,
+#                         downscaled, drought, precipitation, temperature, wind,
+#                         water-balance, evapotranspiration, cmip5, cmip6
+#   Fire:                 fire, burned-area, fuels
+#   Vegetation / forest:  vegetation, land-cover, forest, canopy, baseline,
+#                         deforestation, regrowth, change-detection, classification
+#   Hydrology / water:    hydrology, water, watersheds, streams, waterbodies
+#   Agriculture:          agriculture, crops
+#   Boundaries / admin:   boundaries, administrative, states, counties, cities,
+#                         congress, politics, education, census, demographics
+#   Indigenous / justice: indigenous, tribal, justice, redlining, historical
+#   Hazards / health:     hazards, contamination, mining, air-quality, health
+#   Infrastructure:       buildings, infrastructure
+#   Research / monitoring: research-sites, monitoring, ecology
+#   Temporal / scope:     daily, global, conus, north-america
+#
 # ── How to use this file (LLM agents) ──────────────────────────────────────
 #   1. List names:        grep -nE "^  - name:" data_catalog.yml
 #   2. List by topic:     grep -nB6 "topics:.*<keyword>" data_catalog.yml
@@ -270,7 +293,7 @@ datasets:
     source: Microsoft
     url_template: https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/{state}.geojson.zip
     variants: [Alabama, Alaska, Arizona, Arkansas, California, Colorado, Connecticut, Delaware, DistrictofColumbia, Florida, Georgia, Hawaii, Idaho, Illinois, Indiana, Iowa, Kansas, Kentucky, Louisiana, Maine, Maryland, Massachusetts, Michigan, Minnesota, Mississippi, Missouri, Montana, Nebraska, Nevada, NewHampshire, NewJersey, NewMexico, NewYork, NorthCarolina, NorthDakota, Ohio, Oklahoma, Oregon, Pennsylvania, RhodeIsland, SouthCarolina, SouthDakota, Tennessee, Texas, Utah, Vermont, Virginia, Washington, WestVirginia, Wisconsin, Wyoming]
-    topics: [buildings, infrastructure, vector]
+    topics: [buildings, infrastructure]
     notes: >
       Per-state GeoJSON building footprints in EPSG:4326. Substitute {state} from
       variants list — multi-word states use PascalCase, no spaces (e.g. NewYork,

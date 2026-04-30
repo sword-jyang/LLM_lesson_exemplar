@@ -6,6 +6,24 @@ This repository is a **template for scientists** learning how AI can help harmon
 
 ---
 
+## TL;DR — Required for every workflow
+
+When a scientist asks for a new harmonization analysis, you MUST do all of the following.
+Every item links to the detailed section below; none are optional.
+
+1. **Place the script in `workflows/<project_name>/`** — never in `examples/` (read-only teaching material).
+2. **Start the script with the bootstrap header** (sys.path insert) — see [Required Script Header](#required-script-header). Skipping this causes `ModuleNotFoundError: No module named 'src'` when run from any working directory other than the repo root.
+3. **Check `data_catalog.yml` before searching elsewhere** — see [Check the catalog before searching elsewhere](#check-the-catalog-before-searching-elsewhere). Use `python scripts/find_dataset.py <keyword>` for a one-shot lookup.
+4. **Set `output_dir=Path(__file__).parent / "output"`** so outputs co-locate with the script.
+5. **Save the static visualization as exactly `harmonized_visualization.png`** — the mkdocs build hook in [hooks.py](hooks.py) is hardcoded to that filename. Different filenames silently fail to appear on the website.
+6. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
+7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
+8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
+
+If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
+
+---
+
 ## Directory Structure
 
 ```
@@ -184,22 +202,29 @@ URLs found there have already been verified to download and harmonize correctly.
 
 Workflow:
 
-1. **Scan names first — do NOT read the full catalog file.** It grows over time
-   and reading it whole wastes context. List names with:
+1. **Run `python scripts/find_dataset.py <keyword> [<keyword> ...]`.** This is
+   the one-shot lookup: it scans every entry's name, source, notes, topics,
+   and variants list (case-insensitive substring match, multiple keywords
+   AND-ed) and prints each match with its concrete URL (or expanded template),
+   default STAC asset, type, and topics. Examples:
    ```bash
-   grep -nE "^  - name:" data_catalog.yml
+   python scripts/find_dataset.py fire
+   python scripts/find_dataset.py climate precipitation
+   python scripts/find_dataset.py building wyoming
    ```
-   That returns one line per entry (name + line number) — currently ~25 lines
-   covering 70+ datasets after templated-entry collapse.
-2. Pick candidate entries by name match, then read only those entries with
-   `Read offset=<line> limit=12` (entries are typically 5–12 lines).
-3. If a matching entry exists, use that URL directly — do NOT search the web,
+   This replaces the older multi-step `grep + Read offset/limit + substitute`
+   protocol — a weak model running one command is far more reliable.
+2. If a matching entry exists, use that URL directly — do NOT search the web,
    the ESIIL Data Library, or external sources for an alternative.
-4. If multiple entries match (e.g. NLCD has multiple years), surface the choices
+3. If multiple entries match (e.g. NLCD has multiple years), surface the choices
    and ask the user which to use.
-5. Only fall through to the ESIIL Data Library or web search if no entry matches.
-6. If you discover a new URL through the fallback path AND it passes the health
+4. Only fall through to the ESIIL Data Library or web search if no entry matches.
+5. If you discover a new URL through the fallback path AND it passes the health
    check after a successful workflow, add it to the catalog (see rules below).
+
+If `find_dataset.py` is unavailable for some reason, the manual fallback is
+`grep -nE "^  - name:" data_catalog.yml` to list names, then `Read offset=<line>
+limit=12` to pull a specific entry.
 
 Skipping this check causes three failures: (a) the user waits while the agent
 re-searches sources we already vetted, (b) the agent may pick a stale or
@@ -226,6 +251,38 @@ The URL health test only checks the first variant of each templated entry,
 since all variants share the same host. Add a templated entry (rather than N
 separate rows) when you have ≥3 mostly-identical entries that differ only in
 one substitutable token (year, state code, FIPS, tile ID, etc.).
+
+### DatasetSpec field reference
+
+Every workflow constructs one `DatasetSpec` per input layer. The fields below
+are the complete public API — if a field you want to use isn't listed here,
+**it doesn't exist**. Do not invent fields like `crs=`, `extent=`, or
+`resampling=`; CRS / extent / resolution belong on `ExampleWorkflow`, not on
+individual datasets. Source of truth: `src/geospatial_harmonizer.py:91`.
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `name` | `str` | required | Short identifier — used as the output filename stem |
+| `url` | `str` | required | Direct download URL, OPeNDAP endpoint, or STAC API root |
+| `data_type` | `Literal["raster", "vector"]` | required | Dispatches to raster vs vector pipeline |
+| `rasterize` | `bool` | `False` | Vector→raster: rasterize to the target grid instead of keeping vector |
+| `burn_value` | `int` | `1` | Value to burn into rasterized vector pixels |
+| `labels_url` | `str \| None` | `None` | URL to a `VALUE,LABEL` CSV for legend labels |
+| `resampling_method` | `Literal["bilinear", "nearest", "cubic"] \| None` | `None` (auto) | Override auto-detect (int dtype → nearest, float → bilinear) |
+| `netcdf_variable` | `str \| None` | `None` | NetCDF/OPeNDAP variable name, e.g. `"precipitation"` |
+| `netcdf_months` | `list[int] \| None` | `None` | Month indices to average over, e.g. `[12,1,2,3]` for winter |
+| `secondary_url` | `str \| None` | `None` | Second OPeNDAP URL for derived variables (e.g. `rhsmin` for VPD) |
+| `secondary_netcdf_variable` | `str \| None` | `None` | Variable name in the secondary NetCDF |
+| `is_stac` | `bool` | `False` | Set `True` to discover/download via STAC catalog |
+| `stac_collection` | `str \| None` | `None` | STAC collection ID, e.g. `"sentinel-2-l2a"` |
+| `stac_asset` | `str \| None` | `None` | Asset key to download, e.g. `"B08"` or `"data"` |
+| `stac_datetime` | `str \| None` | `None` | ISO-8601 range, e.g. `"2023-06-01/2023-08-31"` |
+| `stac_query` | `dict \| None` | `None` | Extra search filters, e.g. `{"eo:cloud_cover": {"lt": 20}}` |
+| `is_wcs` / `wcs_layer` | `bool` / `str` | `False` / `None` | WCS endpoint support (rarely needed) |
+| `is_wms` / `wms_layer` | `bool` / `str` | `False` / `None` | WMS endpoint support (rarely needed) |
+
+`ExampleWorkflow` carries the workflow-level settings (CRS, extent, resolution,
+output_dir, create_visualization, verbose) — not `DatasetSpec`.
 
 ### Catalog entry → DatasetSpec (worked examples)
 
@@ -439,14 +496,19 @@ Always set `output_dir=Path(__file__).parent / "output"` in new scripts.
 ### Required Script Header
 
 Every workflow script MUST include this bootstrap before importing from `src/`,
-so the script runs correctly regardless of the user's working directory:
+so the script runs correctly regardless of the user's working directory **and
+regardless of how deeply the script is nested below the repo root**:
 
 ```python
 import sys
 from pathlib import Path
 
-# Add repo root to sys.path so `src` is importable regardless of working directory
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Walk up the directory tree until we find the repo root (the dir containing src/).
+# This is depth-agnostic: works for examples/<topic>/<script>.py,
+# workflows/<project>/<script>.py, and arbitrarily nested subfolders.
+_repo_root = next(p for p in Path(__file__).resolve().parents
+                  if (p / "src" / "geospatial_harmonizer.py").exists())
+sys.path.insert(0, str(_repo_root))
 
 from src.geospatial_harmonizer import (
     DatasetSpec,
@@ -457,13 +519,13 @@ from src.geospatial_harmonizer import (
 
 Without this header, `from src.geospatial_harmonizer import ...` only works when
 the user happens to run from the repo root with `src/` on `PYTHONPATH`. With it,
-`python workflows/my_project/my_script.py` works from anywhere.
+`python workflows/my_project/my_script.py` (or any nested path) works from anywhere.
 
-**Path depth:** `Path(__file__).parent.parent.parent` resolves to the repo root
-for both reference examples (`examples/<topic>/<script>.py`) and user workflows
-(`workflows/<project>/<script>.py`) — both are exactly three levels deep. If a
-script is placed at a different depth, adjust the number of `.parent` calls so
-the path resolves to the repo root.
+**Why a walker instead of `.parent.parent.parent`?** The earlier template
+hardcoded "three levels up", which broke as soon as a script lived at a
+different depth (e.g. `workflows/<topic>/<subtopic>/script.py`). The walker
+finds the repo root by *content* (the presence of `src/geospatial_harmonizer.py`)
+rather than by *count*, so it can't get the depth wrong.
 
 The Colorado reference example uses this pattern — see
 `examples/colorado_fire_risk/colorado_harmonization.py`.
@@ -533,10 +595,34 @@ The Geospatial Harmonization Agent standardizes multiple geospatial datasets (ra
 The agent MUST ensure the following inputs are defined before execution:
 
 - `target_crs` (e.g., EPSG:4326)
-- `target_extent` (xmin, ymin, xmax, ymax)
+- `target_extent` (xmin, ymin, xmax, ymax) — see [Resolving named regions to a bbox](#resolving-named-regions-to-a-bbox) below
 - `input_datasets` (local paths or URLs)
 
 If any are missing → ask the user before proceeding.
+
+### Resolving named regions to a bbox
+
+If the user names a US state, county, or place ("crop to Colorado", "just
+Larimer County", "around Boulder, CO"), **never fabricate the bounding box
+from model knowledge**. Run the helper and use its output verbatim:
+
+```bash
+python scripts/region_extent.py state Colorado
+python scripts/region_extent.py county Larimer Colorado
+python scripts/region_extent.py place Boulder CO
+```
+
+The script downloads (and caches) the relevant Census TIGER 2025 layer,
+filters to the requested feature, reprojects to EPSG:4326, and prints a
+ready-to-paste `target_extent=(xmin, ymin, xmax, ymax)` line. State
+identifiers accept the full name, the 2-letter postal code, or the 2-digit
+FIPS code.
+
+For anything the helper does not cover — custom AOIs, ecoregions, watersheds,
+study sites, neighborhoods, named features outside TIGER — **ask the user**
+for the bbox in EPSG:4326, or for a vector file (shapefile/GeoJSON) whose
+`.total_bounds` you can use. Guessing is not an acceptable fallback; an
+off-by-half-a-degree extent silently miscrops every downstream layer.
 
 ---
 
@@ -774,7 +860,7 @@ Example disclosure:
 ## Known Limitations
 
 - **HDF4/HDF5 and GRIB/GRIB2 not supported** — preprocess to GeoTIFF with GDAL or cfgrib before using the harmonizer.
-- **Multi-band rasters** — only band 1 is read; multi-spectral inputs (Landsat, Sentinel) must be split per band or use the STAC asset key to select a single band.
+- **Multi-band visualization** — `harmonize_raster` reads, reprojects, and writes all bands (multi-band GeoTIFFs round-trip cleanly), but `create_visualization` renders only band 1 in the static PNG. For multi-spectral analysis, work directly with the harmonized GeoTIFF; for single-band visualization output, use a STAC asset key to select one band upstream (e.g. Sentinel-2 `B08`, Landsat `SR_B4`).
 - **Time series output** — the pipeline produces one harmonized raster per dataset; stacked temporal outputs are not yet supported.
 - **Attribute-based rasterization** — vectors are rasterized with a constant burn value; to burn a field value (e.g. fire year, watershed ID) requires a custom step.
 - **DEM-derived products** — slope and aspect are not computed automatically; download a DEM and derive these externally before adding to the workflow.
