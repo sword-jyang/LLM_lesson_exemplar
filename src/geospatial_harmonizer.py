@@ -123,6 +123,17 @@ class ExampleWorkflow:
     output_dir: Path
     create_visualization: bool = True
     verbose: bool = True
+    # Optional boundary clipping — when set, outputs are clipped to the actual
+    # boundary polygon instead of the rectangular target_extent bounding box.
+    # Accepts any of:
+    #   - A shorthand string: "state:Utah", "county:Larimer:Colorado",
+    #     "place:Boulder:CO" — resolved via Census TIGER shapefiles.
+    #   - A file path (str or Path) to a GeoJSON / shapefile boundary file.
+    #   - None (default) — rectangular bounding-box clipping only.
+    # When clip_boundary is set and target_extent is not explicitly provided,
+    # run_harmonization_example will auto-compute target_extent from the
+    # boundary's bounding box in target_crs.
+    clip_boundary: str | Path | None = None
 
 
 @dataclass
@@ -133,6 +144,8 @@ class GridSpec:
     width: int
     height: int
     transform: object
+    # Shapely geometry for boundary clipping.  None = rectangular bbox only.
+    clip_geometry: object | None = None
 
 
 def _log(msg: str, verbose: bool) -> None:
@@ -140,7 +153,12 @@ def _log(msg: str, verbose: bool) -> None:
         print(msg)
 
 
-def build_grid_spec(target_crs: str, target_extent: BBox, target_resolution: float) -> GridSpec:
+def build_grid_spec(
+    target_crs: str,
+    target_extent: BBox,
+    target_resolution: float,
+    clip_geometry: object | None = None,
+) -> GridSpec:
     xmin, ymin, xmax, ymax = target_extent
     width = int(round((xmax - xmin) / target_resolution))
     height = int(round((ymax - ymin) / target_resolution))
@@ -152,6 +170,7 @@ def build_grid_spec(target_crs: str, target_extent: BBox, target_resolution: flo
         width=width,
         height=height,
         transform=transform,
+        clip_geometry=clip_geometry,
     )
 
 
@@ -943,6 +962,77 @@ def fetch_netcdf_seasonal_geotiff(
     return output_path
 
 
+def resolve_clip_boundary(
+    clip_boundary: str | Path,
+    target_crs: str,
+    verbose: bool = True,
+) -> tuple[object, BBox]:
+    """Resolve a ``clip_boundary`` specifier to a Shapely geometry and bbox.
+
+    Accepts:
+      - ``"state:Utah"`` / ``"county:Larimer:Colorado"`` / ``"place:Boulder:CO"``
+        — resolved via Census TIGER shapefiles (uses ``scripts/region_extent``).
+      - A file path (str or Path) to a GeoJSON or shapefile boundary file.
+
+    Returns
+    -------
+    (geometry, bbox)
+        *geometry* is a Shapely geometry (Multi)Polygon in *target_crs*.
+        *bbox* is ``(xmin, ymin, xmax, ymax)`` — the tight bounding box of that
+        geometry in *target_crs*.
+    """
+    clip_str = str(clip_boundary)
+
+    # Shorthand strings: "state:Utah", "county:Larimer:Colorado", "place:Boulder:CO"
+    if clip_str.startswith(("state:", "county:", "place:")):
+        parts = clip_str.split(":")
+        kind = parts[0]
+        if kind == "state" and len(parts) == 2:
+            name, state_arg = parts[1], None
+        elif kind in ("county", "place") and len(parts) == 3:
+            name, state_arg = parts[1], parts[2]
+        else:
+            raise ValueError(
+                f"Invalid clip_boundary shorthand: {clip_str!r}. "
+                f"Expected 'state:<name>', 'county:<name>:<state>', or 'place:<name>:<state>'."
+            )
+
+        # Import the programmatic API from region_extent
+        import importlib.util, sys as _sys
+        spec = importlib.util.spec_from_file_location(
+            "region_extent",
+            Path(__file__).resolve().parent.parent / "scripts" / "region_extent.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        _log(f"Resolving clip boundary: {clip_str} (CRS={target_crs})", verbose)
+        gdf = mod.resolve_boundary(kind, name, state=state_arg, target_crs=target_crs)
+    else:
+        # File path
+        boundary_path = Path(clip_str)
+        if not boundary_path.exists():
+            raise FileNotFoundError(f"Clip boundary file not found: {boundary_path}")
+        _log(f"Loading clip boundary from file: {boundary_path}", verbose)
+        gdf = gpd.read_file(boundary_path)
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326")
+        gdf = gdf.to_crs(target_crs)
+
+    # Dissolve to a single geometry (union of all features)
+    geom = gdf.geometry.union_all()
+    xmin, ymin, xmax, ymax = gdf.total_bounds
+
+    # Round bbox appropriately for the CRS (cast to plain float for clean repr)
+    if gdf.crs.is_geographic:
+        bbox = (round(float(xmin), 4), round(float(ymin), 4), round(float(xmax), 4), round(float(ymax), 4))
+    else:
+        bbox = (round(float(xmin), 1), round(float(ymin), 1), round(float(xmax), 1), round(float(ymax), 1))
+
+    _log(f"  Boundary bbox in {target_crs}: {bbox}", verbose)
+    return geom, bbox
+
+
 def harmonize_raster(
     input_path: Path,
     grid: GridSpec,
@@ -952,9 +1042,13 @@ def harmonize_raster(
 ) -> Path:
     """Harmonize raster to target grid, clipping to extent first for efficiency.
 
+    When ``grid.clip_geometry`` is set (a Shapely polygon), pixels outside the
+    boundary are set to nodata after reprojection — producing output that
+    follows the actual boundary shape, not just a rectangular bounding box.
+
     Args:
         input_path: Source raster file.
-        grid: Target grid (CRS, extent, resolution).
+        grid: Target grid (CRS, extent, resolution, optional clip_geometry).
         output_path: Where to write the harmonized GeoTIFF.
         resampling_method: One of "bilinear", "nearest", or "cubic".
             Use "nearest" for categorical data (land cover, fuel models) to avoid
@@ -1053,6 +1147,27 @@ def harmonize_raster(
             }
         )
 
+    # Apply boundary clipping if a clip geometry is provided.
+    # This masks pixels outside the actual boundary polygon to nodata,
+    # so the output follows the real boundary shape, not just its bbox.
+    if grid.clip_geometry is not None:
+        from shapely.geometry import mapping
+        _log("  Applying boundary clip (masking pixels outside boundary to nodata)", verbose)
+        clip_shapes = [mapping(grid.clip_geometry)]
+        for band_idx in range(dst.shape[0]):
+            band = dst[band_idx]
+            # Build a binary mask: 1 inside boundary, 0 outside
+            clip_mask = rasterize(
+                [(grid.clip_geometry, 1)],
+                out_shape=(grid.height, grid.width),
+                transform=grid.transform,
+                fill=0,
+                all_touched=True,
+                dtype="uint8",
+            )
+            band[clip_mask == 0] = src_nodata
+            dst[band_idx] = band
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(output_path, "w", **meta) as dst_file:
         dst_file.write(dst)
@@ -1076,11 +1191,16 @@ def rasterize_vector_to_grid(
     if str(gdf.crs) != grid.crs:
         gdf = gdf.to_crs(grid.crs)
 
-    xmin, ymin, xmax, ymax = grid.extent
-    clip_geom = box(xmin, ymin, xmax, ymax)
-    gdf = gdf[gdf.intersects(clip_geom)].copy()
+    # Clip to boundary polygon if available, otherwise use rectangular extent
+    if grid.clip_geometry is not None:
+        _log("  Clipping vector to boundary polygon", verbose)
+        gdf = gpd.clip(gdf, grid.clip_geometry)
+    else:
+        xmin, ymin, xmax, ymax = grid.extent
+        clip_geom = box(xmin, ymin, xmax, ymax)
+        gdf = gdf[gdf.intersects(clip_geom)].copy()
 
-    shapes = [(geom, burn_value) for geom in gdf.geometry if geom is not None]
+    shapes = [(geom, burn_value) for geom in gdf.geometry if geom is not None and not geom.is_empty]
     burned = rasterize(
         shapes=shapes,
         out_shape=(grid.height, grid.width),
@@ -1114,38 +1234,46 @@ def harmonize_vector(
     output_path: Path,
     verbose: bool = True,
 ) -> Path:
-    """Harmonize vector to target CRS and clip to target extent.
-    
+    """Harmonize vector to target CRS and clip to target extent or boundary.
+
+    When ``grid.clip_geometry`` is set, features are clipped to the actual
+    boundary polygon (e.g. a state outline) rather than just the rectangular
+    bounding box.
+
     Args:
         input_path: Path to input vector file
-        grid: Target grid specification
+        grid: Target grid specification (with optional clip_geometry)
         output_path: Path to save harmonized vector
         verbose: Print progress messages
-        
+
     Returns:
         Path to harmonized vector file
     """
     _log(f"Harmonizing vector: {input_path.name}", verbose)
-    
+
     gdf = gpd.read_file(input_path)
     if gdf.crs is None:
         gdf = gdf.set_crs("EPSG:4326")
-    
+
     # Reproject to target CRS if needed
     if str(gdf.crs) != grid.crs:
         gdf = gdf.to_crs(grid.crs)
-    
-    # Clip to target extent
-    xmin, ymin, xmax, ymax = grid.extent
-    clip_geom = box(xmin, ymin, xmax, ymax)
-    gdf = gdf[gdf.intersects(clip_geom)].copy()
-    
+
+    # Clip to boundary polygon if available, otherwise use rectangular extent
+    if grid.clip_geometry is not None:
+        _log("  Clipping vector to boundary polygon", verbose)
+        gdf = gpd.clip(gdf, grid.clip_geometry)
+    else:
+        xmin, ymin, xmax, ymax = grid.extent
+        clip_geom = box(xmin, ymin, xmax, ymax)
+        gdf = gdf[gdf.intersects(clip_geom)].copy()
+
     # Save harmonized vector
     output_path.parent.mkdir(parents=True, exist_ok=True)
     gdf.to_file(output_path, driver="GeoJSON")
-    
+
     _log(f"  Saved harmonized vector: {output_path.name} ({len(gdf)} features)", verbose)
-    
+
     return output_path
 
 
@@ -1984,10 +2112,27 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
     _self.DISCOVERED_COLOR_MAP = None
     _self.DISCOVERED_LABELS = None
 
+    # Resolve clip boundary if provided
+    clip_geom = None
+    if workflow.clip_boundary is not None:
+        clip_geom, boundary_bbox = resolve_clip_boundary(
+            workflow.clip_boundary,
+            workflow.target_crs,
+            verbose=workflow.verbose,
+        )
+        # If target_extent wasn't explicitly set (all zeros or a sentinel),
+        # auto-compute from the boundary bbox.  In practice, users who set
+        # clip_boundary should also set target_extent to the boundary's bbox
+        # (region_extent.py prints both), but this is a safety net.
+        if workflow.target_extent == (0, 0, 0, 0):
+            workflow.target_extent = boundary_bbox
+            _log(f"Auto-computed target_extent from boundary: {boundary_bbox}", workflow.verbose)
+
     grid = build_grid_spec(
         target_crs=workflow.target_crs,
         target_extent=workflow.target_extent,
         target_resolution=workflow.target_resolution,
+        clip_geometry=clip_geom,
     )
 
     workflow.output_dir.mkdir(parents=True, exist_ok=True)

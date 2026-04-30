@@ -35,6 +35,10 @@ from src.geospatial_harmonizer import (
 )
 
 # Colorado bounding box in EPSG:4326
+# Note: Colorado is roughly rectangular, so bbox ≈ actual boundary.
+# For states with irregular boundaries (e.g. Utah, Virginia), use
+# clip_boundary="state:Colorado" to clip to the actual state polygon
+# instead of just the bounding box.  See the ExampleWorkflow docstring.
 COLORADO_EXTENT = (-109.05, 36.99, -102.04, 41.01)
 
 # Common output settings

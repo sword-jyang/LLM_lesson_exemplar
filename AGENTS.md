@@ -19,7 +19,7 @@ Every item links to the detailed section below; none are optional.
 6. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
 7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
 8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
-9. **If the user names a state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. See [Resolving named regions to a bbox](#resolving-named-regions-to-a-bbox). For regions outside TIGER (custom AOIs, ecoregions, neighborhoods), ask the user for the bbox.
+9. **If the user names a state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside TIGER (custom AOIs, ecoregions, neighborhoods), ask the user for a boundary vector file or bounding box.
 
 If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
 
@@ -596,13 +596,21 @@ The Geospatial Harmonization Agent standardizes multiple geospatial datasets (ra
 
 The agent MUST ensure the following inputs are defined before execution:
 
-- `target_crs` (e.g., EPSG:4326)
-- `target_extent` (xmin, ymin, xmax, ymax) — see [Resolving named regions to a bbox](#resolving-named-regions-to-a-bbox) below
+- `target_crs` (e.g., `EPSG:4326`, `EPSG:32613`, or any CRS pyproj resolves).
+  **Any valid CRS is supported** — not just EPSG:4326. When using a projected CRS
+  (e.g. UTM zones), remember that `target_extent` is in the CRS's native units
+  (meters, not degrees) and `target_resolution` should also be in meters.
+- `target_extent` (xmin, ymin, xmax, ymax) — see [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping) below.
+  Must be in the same CRS as `target_crs`.
+- `clip_boundary` (recommended) — clips outputs to an actual boundary polygon instead
+  of just the rectangular bounding box. See [Boundary clipping](#boundary-clipping-not-just-bounding-box).
+  For US states/counties/places, use the shorthand (e.g. `"state:<name>"`).
+  For custom regions, ask the user for a boundary file.
 - `input_datasets` (local paths or URLs)
 
-If any are missing → ask the user before proceeding.
+If any required inputs are missing → ask the user before proceeding.
 
-### Resolving named regions to a bbox
+### Resolving named regions to a bbox and boundary clipping
 
 If the user names a US state, county, or place ("crop to Colorado", "just
 Larimer County", "around Boulder, CO"), **never fabricate the bounding box
@@ -631,11 +639,83 @@ The polygon is reprojected before bounds are taken, so the output tightly
 envelops the feature in the target CRS (corner-reprojection alone would miss
 curvature in projected CRSs).
 
-For anything the helper does not cover — custom AOIs, ecoregions, watersheds,
-study sites, neighborhoods, named features outside TIGER — **ask the user**
-for the bbox in EPSG:4326, or for a vector file (shapefile/GeoJSON) whose
-`.total_bounds` you can use. Guessing is not an acceptable fallback; an
-off-by-half-a-degree extent silently miscrops every downstream layer.
+#### Boundary clipping (not just bounding box)
+
+**Always set `clip_boundary` on `ExampleWorkflow`** when the user names a
+geographic region. A bounding box is rectangular; most states, counties, and
+places are not. Without `clip_boundary`, the output includes data outside the
+actual boundary (e.g. corners of adjacent states).
+
+`clip_boundary` accepts three formats:
+
+| Format | Example | When to use |
+|---|---|---|
+| Shorthand string | `"state:<name>"`, `"county:<name>:<state>"`, `"place:<name>:<state>"` | Any US state / county / place — resolved automatically via Census TIGER |
+| File path | `"data/my_boundary.geojson"` | User-provided boundary file (GeoJSON, shapefile, GeoPackage) for custom regions |
+| `None` (default) | — | Rectangular bbox only (backwards compatible) |
+
+**What it does:**
+- **Rasters:** pixels outside the boundary polygon are set to nodata after
+  reprojection, so the output follows the actual boundary shape.
+- **Vectors:** features are clipped to the boundary polygon (not just filtered
+  by bbox intersection).
+- The grid is still computed from the rectangular bbox of the boundary
+  (for pixel alignment), but the boundary mask removes data outside the polygon.
+
+**Example — state boundary in EPSG:4326 (geographic CRS):**
+
+```python
+# Resolution is in degrees because EPSG:4326 is geographic.
+# Substitute any state, county, or place the user requests.
+workflow = ExampleWorkflow(
+    name="virginia_land_cover",
+    datasets=DATASETS,
+    target_crs="EPSG:4326",
+    target_extent=(-83.6754, 36.5408, -75.2422, 39.466),  # from region_extent.py state Virginia
+    target_resolution=0.00243,
+    output_dir=OUTPUT_DIR,
+    clip_boundary="state:Virginia",  # clips to actual state polygon, not bbox
+)
+```
+
+**Example — projected CRS (meters) with boundary clipping:**
+
+```python
+# Resolution is in meters because EPSG:5070 (Conus Albers) is projected.
+# Pass --crs so target_extent is in the same units as target_crs.
+workflow = ExampleWorkflow(
+    name="larimer_fire_risk",
+    datasets=DATASETS,
+    target_crs="EPSG:5070",
+    target_extent=(-876543.2, 1789012.3, -812345.6, 1856789.0),  # from region_extent.py county Larimer Colorado --crs EPSG:5070
+    target_resolution=270,  # 270 meters in projected CRS
+    output_dir=OUTPUT_DIR,
+    clip_boundary="county:Larimer:Colorado",  # boundary auto-reprojected to target_crs
+)
+```
+
+**Example — user-provided boundary file:**
+
+```python
+# For regions not in Census TIGER (watersheds, custom AOIs, etc.),
+# ask the user for a GeoJSON/shapefile and pass the path directly.
+workflow = ExampleWorkflow(
+    name="watershed_analysis",
+    datasets=DATASETS,
+    target_crs="EPSG:32613",
+    target_extent=(400000.0, 4400000.0, 500000.0, 4500000.0),
+    target_resolution=30,
+    output_dir=OUTPUT_DIR,
+    clip_boundary="data/my_watershed.geojson",  # any vector file the user provides
+)
+```
+
+**For anything the helper does not cover** — custom AOIs, ecoregions,
+watersheds, study sites, neighborhoods, named features outside TIGER —
+**ask the user** for a boundary vector file (GeoJSON/shapefile) to pass as
+`clip_boundary`, or fall back to a bbox in the target CRS. Guessing is not
+an acceptable fallback; an off-by-half-a-degree extent silently miscrops
+every downstream layer.
 
 ---
 
