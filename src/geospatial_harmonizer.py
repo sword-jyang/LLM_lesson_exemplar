@@ -1194,6 +1194,7 @@ def rasterize_vector_to_grid(
     # Clip to boundary polygon if available, otherwise use rectangular extent
     if grid.clip_geometry is not None:
         _log("  Clipping vector to boundary polygon", verbose)
+        gdf.geometry = gdf.geometry.make_valid()
         gdf = gpd.clip(gdf, grid.clip_geometry)
     else:
         xmin, ymin, xmax, ymax = grid.extent
@@ -1262,6 +1263,7 @@ def harmonize_vector(
     # Clip to boundary polygon if available, otherwise use rectangular extent
     if grid.clip_geometry is not None:
         _log("  Clipping vector to boundary polygon", verbose)
+        gdf.geometry = gdf.geometry.make_valid()
         gdf = gpd.clip(gdf, grid.clip_geometry)
     else:
         xmin, ymin, xmax, ymax = grid.extent
