@@ -100,7 +100,10 @@ def extract_data_urls(md_text: str) -> set[str]:
 def main() -> int:
     with open(CATALOG_PATH) as f:
         catalog = yaml.safe_load(f) or {}
-    existing_urls = {d["url"] for d in catalog.get("datasets", [])}
+    # Templated entries (url_template + variants) have no top-level `url`; skip
+    # them — they cover one-pattern dataset families that the ESIIL sync would
+    # not propose as new candidates anyway.
+    existing_urls = {d["url"] for d in catalog.get("datasets", []) if "url" in d}
 
     print(f"Fetching ESIIL nav from {ESIIL_MKDOCS} …", file=sys.stderr)
     try:

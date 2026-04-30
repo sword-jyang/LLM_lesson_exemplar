@@ -8,6 +8,7 @@ since URL staleness is outside this repo's control.
 Run separately with: pytest tests/test_url_health.py -v -s
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -23,14 +24,27 @@ REQUEST_TIMEOUT = 20  # seconds
 
 def load_urls():
     """Return list of (label, url) tuples from data_catalog.yml.
-    Entries with health_check: skip are excluded."""
+    Entries with health_check: skip are excluded.
+
+    Templated entries (url_template + variants) are checked once with the first
+    variant substituted, since all variants share the same host and any per-
+    variant outage would not be a catalog problem.
+    """
     with open(CATALOG) as f:
         catalog = yaml.safe_load(f)
     urls = []
     for entry in catalog.get("datasets", []):
         if entry.get("health_check") == "skip":
             continue
-        urls.append((entry["name"], entry["url"]))
+        if "url_template" in entry and entry.get("variants"):
+            template = entry["url_template"]
+            variants = entry["variants"]
+            placeholder = re.findall(r"\{(\w+)\}", template)[0]
+            sample_url = template.format(**{placeholder: variants[0]})
+            label = f"{entry['name']} ({placeholder}={variants[0]})"
+            urls.append((label, sample_url))
+        else:
+            urls.append((entry["name"], entry["url"]))
         if entry.get("labels_url"):
             urls.append((entry["name"] + " (labels)", entry["labels_url"]))
     return urls
@@ -56,6 +70,15 @@ def check_url(url: str) -> tuple[bool, str]:
             headers={"User-Agent": "Mozilla/5.0"},
             allow_redirects=True,
         )
+        # Some APIs (e.g. STAC API roots) reject HEAD with 405. Retry with GET.
+        if r.status_code == 405 and method == "HEAD":
+            r = requests.get(
+                check_url_str,
+                timeout=REQUEST_TIMEOUT,
+                stream=True,
+                headers={"User-Agent": "Mozilla/5.0"},
+                allow_redirects=True,
+            )
         if r.status_code < 400:
             return True, f"HTTP {r.status_code}"
         return False, f"HTTP {r.status_code}"

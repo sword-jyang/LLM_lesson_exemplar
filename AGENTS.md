@@ -174,6 +174,116 @@ The image path in the Markdown file must be:
 It is seeded with the Colorado fire risk example datasets and grows as new
 workflows are created.
 
+### Check the catalog before searching elsewhere
+
+Whenever a user requests data — by topic ("fire risk in Wyoming"), by name
+("NLCD land cover"), or by region ("building footprints for Texas") — the agent
+MUST first consult `data_catalog.yml` to see if a matching URL already exists.
+The catalog is the canonical, health-checked source of truth for this repo;
+URLs found there have already been verified to download and harmonize correctly.
+
+Workflow:
+
+1. **Scan names first — do NOT read the full catalog file.** It grows over time
+   and reading it whole wastes context. List names with:
+   ```bash
+   grep -nE "^  - name:" data_catalog.yml
+   ```
+   That returns one line per entry (name + line number) — currently ~25 lines
+   covering 70+ datasets after templated-entry collapse.
+2. Pick candidate entries by name match, then read only those entries with
+   `Read offset=<line> limit=12` (entries are typically 5–12 lines).
+3. If a matching entry exists, use that URL directly — do NOT search the web,
+   the ESIIL Data Library, or external sources for an alternative.
+4. If multiple entries match (e.g. NLCD has multiple years), surface the choices
+   and ask the user which to use.
+5. Only fall through to the ESIIL Data Library or web search if no entry matches.
+6. If you discover a new URL through the fallback path AND it passes the health
+   check after a successful workflow, add it to the catalog (see rules below).
+
+Skipping this check causes three failures: (a) the user waits while the agent
+re-searches sources we already vetted, (b) the agent may pick a stale or
+unverified URL when a known-good one exists, and (c) the catalog stops being
+authoritative because it's only used for writing, never for reading.
+
+### Templated entries (url_template + variants)
+
+Some entries cover many variants of the same dataset under one row. These use
+`url_template:` (with `{placeholder}` syntax) and `variants:` (the list of valid
+substitutions) instead of a literal `url:`. To use one:
+
+1. Read the entry's `url_template` and `variants` fields.
+2. Substitute the variant the user asked for into the placeholder.
+3. Pass the resulting URL to `DatasetSpec` as usual.
+
+Examples:
+- `url_template: .../usbuildings-v2/{state}.geojson.zip`, `state=Wyoming` →
+  `.../usbuildings-v2/Wyoming.geojson.zip`
+- `url_template: .../Annual_NLCD_LndCov_{year}_CU_C1V1.zip`, `year=2024` →
+  `.../Annual_NLCD_LndCov_2024_CU_C1V1.zip`
+
+The URL health test only checks the first variant of each templated entry,
+since all variants share the same host. Add a templated entry (rather than N
+separate rows) when you have ≥3 mostly-identical entries that differ only in
+one substitutable token (year, state code, FIPS, tile ID, etc.).
+
+### Catalog entry → DatasetSpec (worked examples)
+
+The catalog row tells you what to pass to `DatasetSpec`. Three cases:
+
+**Plain entry (most common).** Just use `url:` directly.
+
+```yaml
+# data_catalog.yml
+- name: USDA Cropland Data Layer (CDL) 2025
+  url: https://www.nass.usda.gov/Research_and_Science/Cropland/Release/datasets/2025_30m_cdls.zip
+```
+```python
+# in your workflow
+DatasetSpec(
+    name="cdl_2025",
+    url="https://www.nass.usda.gov/Research_and_Science/Cropland/Release/datasets/2025_30m_cdls.zip",
+    resampling_method="nearest",  # categorical — see entry's notes
+)
+```
+
+**Templated entry.** Substitute the chosen variant into `url_template`.
+
+```yaml
+# data_catalog.yml
+- name: National Land Cover Database (NLCD) — Annual CONUS
+  url_template: https://www.mrlc.gov/.../Annual_NLCD_LndCov_{year}_CU_C1V1.zip
+  variants: [2024, 2023, 2022, 2021, 2020, 2016, 2011, 2006, 2001]
+```
+```python
+url = "https://www.mrlc.gov/.../Annual_NLCD_LndCov_2024_CU_C1V1.zip"  # year=2024 from variants
+DatasetSpec(name="nlcd_2024", url=url, resampling_method="nearest")
+```
+
+**STAC entry.** Set `is_stac=True`, copy `stac_collection`, pick an asset
+(use `stac_asset_default` if unsure).
+
+```yaml
+# data_catalog.yml
+- name: ERA5 Hourly Reanalysis (Microsoft Planetary Computer STAC)
+  url: https://planetarycomputer.microsoft.com/api/stac/v1
+  stac_collection: era5-pds
+  stac_asset_default: air_temperature_at_2_metres
+```
+```python
+DatasetSpec(
+    name="era5_t2m",
+    url="https://planetarycomputer.microsoft.com/api/stac/v1",
+    is_stac=True,
+    stac_collection="era5-pds",
+    stac_asset="air_temperature_at_2_metres",  # from stac_asset_default
+    stac_datetime="2023-06-01/2023-08-31",     # optional date filter
+    resampling_method="bilinear",              # continuous — see entry's notes
+)
+```
+
+### Adding new entries
+
 Every time a workflow runs successfully (URLs download, harmonization completes,
 PNG is generated), you MUST add any new datasets to `data_catalog.yml`:
 
@@ -202,8 +312,8 @@ If an existing entry starts returning errors in the health check, **remove it**
 from `data_catalog.yml`. Do not add `health_check: skip` to work around a
 failure — that defeats the purpose of the catalog.
 
-When a user asks for datasets on a topic (fire risk, drought, water quality, etc.),
-browse the ESIIL Data Library at https://cu-esiil.github.io/data-library/ for
+If `data_catalog.yml` does not already contain a matching dataset, fall through
+to the ESIIL Data Library at https://cu-esiil.github.io/data-library/ for
 relevant datasets and working code examples. If you successfully download and
 harmonize a dataset found there, add the URL to `data_catalog.yml`.
 
