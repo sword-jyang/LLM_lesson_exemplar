@@ -74,12 +74,13 @@ When a scientist asks you to analyze new data:
 ## Prompt and Action Logging
 
 - `PROMPT_ACTION_LOG.md` is required project memory for all harmonization activity.
-- After every successful harmonization, append a new dated entry with:
-  - the user's original prompt (verbatim or as close as possible),
-  - the files and folders inspected,
-  - the actions taken and key decisions made per dataset,
-  - any verification performed,
-  - open questions, caveats, or follow-up needs.
+* After every successful harmonization, append a new dated entry with:
+  + the user's original prompt (verbatim or as close as possible),
+  + the LLM/agent that handled the request (model name and version, e.g. "MiniMax-M2.5" or "gpt-oss-120b"); ,
+  + the files and folders inspected,
+  + the actions taken and key decisions made per dataset,
+  + any verification performed,
+  + open questions, caveats, or follow-up needs.
 - Keep entries factual and chronological.
 - Preserve the user's exact wording in the Prompt field — it is the reproducible record of what was requested.
 
