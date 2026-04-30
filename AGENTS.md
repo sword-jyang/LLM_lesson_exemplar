@@ -901,6 +901,16 @@ The agent SHOULD NOT:
 - Make silent assumptions
 - Perform destructive operations without confirmation
 
+### Be Patient With Long-Running Scripts
+
+Harmonization scripts can take **up to 10 minutes** to run — downloading data,
+reprojecting, and generating the final HTML/PNG outputs all take time. This is
+normal, not a sign of failure.
+
+**Do not prompt the user to re-run a script that is still executing.** If you
+are unsure whether it finished, check whether the process is still running or
+whether the expected output files exist before suggesting a retry.
+
 ---
 
 ## Example Workflows
