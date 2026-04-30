@@ -43,3 +43,45 @@ Claude Sonnet 4.5
 ### Open questions and follow-up
 - MTBS perimeters are kept as vector; if a future workflow needs them as a raster mask, set `rasterize=True` in the `DatasetSpec`.
 - MACAv2 ensemble member used is CCSM4 r6i1p1; other models are available on the same THREDDS server if a multi-model comparison is needed.
+
+---
+
+## 2026-04-30
+
+### Prompt
+User asked: "recreate the colorado fire risk example but for utah in epsg:5070"
+
+### LLM
+glm-4.7
+
+### Files and folders inspected
+- `examples/colorado_fire_risk/colorado_harmonization.py`
+- `scripts/region_extent.py`
+- `src/geospatial_harmonizer.py`
+- `data_catalog.yml`
+
+### Actions taken
+- Ran `python scripts/region_extent.py state Utah --crs EPSG:5070` to obtain Utah bounding box in EPSG:5070: (-1581748.3, 1629453.6, -1085516.0, 2250700.3)
+- Created `workflows/utah_fire_risk/utah_harmonization.py` with the same four datasets as Colorado example, adapted for Utah:
+  - FBFM40 fuel models: same CONUS source, resampled with `nearest` to preserve integer class codes
+  - MACAv2 winter precipitation: same OPeNDAP source, subsetted to Utah before transfer, averaged Dec–Mar months, resampled using bilinear interpolation
+  - MTBS burned areas: same perimeter shapefile, reprojected to EPSG:5070, clipped to Utah state boundary (using `clip_boundary="state:Utah"`), kept as vector
+  - Building footprints: Utah-specific GeoJSON URL, rasterized to presence/absence at 270 m resolution
+- Target CRS changed to EPSG:5070 (CONUS Albers Equal Area) with 270 m resolution (meters, not degrees)
+- Used `clip_boundary="state:Utah"` to clip outputs to actual state polygon instead of just bounding box
+- Generated `workflows/utah_fire_risk/output/harmonized_visualization.png` and `harmonized_visualization.html`
+- Created `docs/workflows/utah_fire_risk.md` documentation following the template
+
+### Verification
+- Ran `python workflows/utah_fire_risk/utah_harmonization.py` successfully
+- Confirmed all four layers harmonized and written to `workflows/utah_fire_risk/output/`
+- Confirmed OPeNDAP subset transferred only Utah pixels
+- Confirmed `nearest` resampling preserved FBFM40 class codes
+- Confirmed boundary clipping applied to all outputs (rasters clipped to state polygon, vectors clipped to boundary)
+- Documentation created with no placeholder text
+
+### Open questions and follow-up
+- MTBS perimeters are kept as vector; if a future workflow needs them as a raster mask, set `rasterize=True` in the `DatasetSpec`.
+- MACAv2 ensemble member used is CCSM4 r6i1p1; other models are available on the same THREDDS server if a multi-model comparison is needed.
+- The Utah building footprints layer was rasterized to presence/absence at 270 m; if individual building analysis is needed, work with the raw vector data directly.
+- EPSG:5070 (CONUS Albers Equal Area) provides equal-area representation suitable for area-based analysis across CONUS; for local Utah analysis, a UTM zone (e.g., EPSG:32612 for northern Utah) might be more appropriate.
