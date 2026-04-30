@@ -2135,6 +2135,27 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
         clip_geometry=clip_geom,
     )
 
+    # Several download functions (OPeNDAP, STAC, ArcGIS ImageServer) require
+    # a bbox in EPSG:4326.  When target_crs is anything else (projected CRS,
+    # NAD83, etc.) we transform the extent to geographic coordinates.
+    # Use rasterio.crs.CRS for comparison so "EPSG:4326", "epsg:4326",
+    # "+proj=longlat +datum=WGS84", etc. all match correctly.
+    from rasterio.crs import CRS as _CRS
+    from rasterio.warp import transform_bounds
+    _target_crs_obj = _CRS.from_user_input(workflow.target_crs)
+    _wgs84 = _CRS.from_epsg(4326)
+    if _target_crs_obj == _wgs84:
+        download_bbox = workflow.target_extent
+    else:
+        xmin4326, ymin4326, xmax4326, ymax4326 = transform_bounds(
+            _target_crs_obj, _wgs84, *workflow.target_extent
+        )
+        download_bbox: BBox = (
+            round(xmin4326, 4), round(ymin4326, 4),
+            round(xmax4326, 4), round(ymax4326, 4),
+        )
+        _log(f"Download bbox (EPSG:4326): {download_bbox}", workflow.verbose)
+
     workflow.output_dir.mkdir(parents=True, exist_ok=True)
     output_files: list[Path] = []
     viz_inputs: list[tuple[str, Path]] = []
@@ -2189,7 +2210,7 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
                     catalog_url=dataset.url,
                     collection=dataset.stac_collection,
                     asset_key=dataset.stac_asset,
-                    bbox=workflow.target_extent,
+                    bbox=download_bbox,  # STAC search requires EPSG:4326
                     output_dir=dataset_dir,
                     datetime=dataset.stac_datetime,
                     query=dataset.stac_query,
@@ -2201,7 +2222,7 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
                 source_file = fetch_netcdf_seasonal_geotiff(
                     url=dataset.url,
                     variable=dataset.netcdf_variable,
-                    bbox=workflow.target_extent,
+                    bbox=download_bbox,  # OPeNDAP coords are geographic
                     output_path=nc_path,
                     months=dataset.netcdf_months,
                     verbose=workflow.verbose,
@@ -2212,7 +2233,7 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
                 source_file = compute_vpd_geotiff(
                     tasmax_url=dataset.url,
                     rhsmin_url=dataset.secondary_url,
-                    bbox=workflow.target_extent,
+                    bbox=download_bbox,  # OPeNDAP coords are geographic
                     output_path=vpd_path,
                     tasmax_var=dataset.netcdf_variable,
                     rhsmin_var=dataset.secondary_netcdf_variable,
@@ -2220,7 +2241,7 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
                 )
             # Check if URL is a WMS endpoint
             elif dataset.is_wms and dataset.data_type == "raster":
-                # Download from WMS with target extent
+                # WMS accepts bbox in the workflow's CRS (passed explicitly)
                 source_file = download_wms_coverage(
                     wms_url=dataset.url,
                     layer=dataset.wms_layer,
@@ -2234,7 +2255,7 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
                 )
             # Check if URL is a WCS endpoint
             elif dataset.is_wcs and dataset.data_type == "raster":
-                # Download from WCS with target extent
+                # WCS accepts bbox in the workflow's CRS (passed explicitly)
                 source_file = download_wcs_coverage(
                     wcs_url=dataset.url,
                     layer=dataset.wcs_layer,
@@ -2248,11 +2269,11 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
                 )
             # Check if URL is an ArcGIS ImageServer endpoint
             elif "ImageServer" in dataset.url and dataset.data_type == "raster":
-                # Download directly from ImageServer with target grid dimensions
+                # ImageServer hardcodes bboxSR=4326, needs geographic coords
                 source_file = download_arcgis_image_server(
                     dataset.url,
                     dataset_dir,
-                    bbox=grid.extent,
+                    bbox=download_bbox,
                     width=grid.width,
                     height=grid.height,
                     verbose=workflow.verbose,
