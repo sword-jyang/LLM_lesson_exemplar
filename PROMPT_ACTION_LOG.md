@@ -18,6 +18,9 @@ User asked: "Download these datasets, harmonize them to EPSG:4326 over Colorado,
 - Microsoft building footprints (vector, rasterize to presence/absence):
   `https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Colorado.geojson.zip`"
 
+### LLM
+Claude Sonnet 4.5
+
 ### Files and folders inspected
 - `src/geospatial_harmonizer.py`
 - `data_catalog.yml`
