@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-"""Look up the EPSG:4326 bounding box of a US state, county, or place.
+"""Look up the bounding box of a US state, county, or place in any target CRS.
 
 Use this instead of guessing or relying on model knowledge for region extents.
 Bounds come from authoritative Census TIGER 2025 data and are returned as a
 (xmin, ymin, xmax, ymax) tuple ready to paste into `target_extent=` on
-`ExampleWorkflow`.
+`ExampleWorkflow`. Output is in EPSG:4326 by default; pass `--crs` to get
+bounds in any other CRS (the polygon is reprojected before bounds are taken,
+so the result tightly envelops the feature in the target CRS).
 
 Usage:
-    python scripts/region_extent.py state <name>
-    python scripts/region_extent.py county <name> <state>
-    python scripts/region_extent.py place <name> <state>
+    python scripts/region_extent.py state <name> [--crs <EPSG:NNNN>]
+    python scripts/region_extent.py county <name> <state> [--crs <EPSG:NNNN>]
+    python scripts/region_extent.py place <name> <state> [--crs <EPSG:NNNN>]
 
 Examples:
     python scripts/region_extent.py state Colorado
-    python scripts/region_extent.py state CO
     python scripts/region_extent.py state "New York"
     python scripts/region_extent.py county Larimer Colorado
     python scripts/region_extent.py place Boulder CO
+    python scripts/region_extent.py state Colorado --crs <target_crs>
 
 State identifiers can be the full name ("Colorado"), the 2-letter postal
 code ("CO"), or the 2-digit FIPS code ("08"). County and place names are
 matched case-insensitively against the TIGER NAME field within the given
-state.
+state. The `--crs` value can be any CRS pyproj resolves (EPSG code, WKT,
+proj string) and must match whatever you plan to set `target_crs=` to in
+the workflow — `target_extent` and `target_crs` must agree.
 
 For regions not covered by this helper (custom AOIs, ecoregions, watersheds,
 study sites, neighborhoods, named features outside TIGER), ask the user for
@@ -96,30 +100,40 @@ def _resolve_state(states: gpd.GeoDataFrame, ident: str) -> tuple[str, str, str]
     return row["NAME"], row["STUSPS"], row["STATEFP"]
 
 
-def _bbox_4326(gdf: gpd.GeoDataFrame) -> tuple[float, float, float, float]:
-    xmin, ymin, xmax, ymax = gdf.to_crs("EPSG:4326").total_bounds
-    return round(xmin, 4), round(ymin, 4), round(xmax, 4), round(ymax, 4)
+def _bbox_in_crs(gdf: gpd.GeoDataFrame, target_crs: str) -> tuple[float, float, float, float]:
+    """Reproject the polygon(s) to target_crs, then take total_bounds.
+
+    Reprojecting the polygon (rather than reprojecting four bbox corners) is
+    important: a feature's bbox in EPSG:4326 reprojected corner-by-corner can
+    miss curvature and yield a too-tight envelope in projected CRSs.
+    """
+    xmin, ymin, xmax, ymax = gdf.to_crs(target_crs).total_bounds
+    # Geographic CRSs are in degrees → 4 decimals (~11 m); projected CRSs are
+    # typically in meters → integer precision is sufficient for cropping.
+    if gpd.GeoSeries([], crs=target_crs).crs.is_geographic:
+        return round(xmin, 4), round(ymin, 4), round(xmax, 4), round(ymax, 4)
+    return round(xmin, 1), round(ymin, 1), round(xmax, 1), round(ymax, 1)
 
 
-def _emit(label: str, bbox: tuple[float, float, float, float]) -> None:
+def _emit(label: str, bbox: tuple[float, float, float, float], target_crs: str) -> None:
     xmin, ymin, xmax, ymax = bbox
     print(f"{label}")
-    print(f"EPSG:4326 bounds: ({xmin}, {ymin}, {xmax}, {ymax})")
+    print(f"{target_crs} bounds: ({xmin}, {ymin}, {xmax}, {ymax})")
     print()
     print("Copy-paste for ExampleWorkflow:")
-    print(f"  target_crs=\"EPSG:4326\",")
+    print(f'  target_crs="{target_crs}",')
     print(f"  target_extent=({xmin}, {ymin}, {xmax}, {ymax}),  # {label}")
 
 
-def cmd_state(name: str) -> int:
+def cmd_state(name: str, target_crs: str) -> int:
     states = gpd.read_file(_download_and_extract(STATES_URL, CACHE_DIR / "state"))
     full, stusps, fips = _resolve_state(states, name)
-    bbox = _bbox_4326(states[states["STATEFP"] == fips])
-    _emit(f"{full} ({stusps}, FIPS {fips})", bbox)
+    bbox = _bbox_in_crs(states[states["STATEFP"] == fips], target_crs)
+    _emit(f"{full} ({stusps}, FIPS {fips})", bbox, target_crs)
     return 0
 
 
-def cmd_county(county_name: str, state_ident: str) -> int:
+def cmd_county(county_name: str, state_ident: str, target_crs: str) -> int:
     states = gpd.read_file(_download_and_extract(STATES_URL, CACHE_DIR / "state"))
     state_full, _, fips = _resolve_state(states, state_ident)
     counties = gpd.read_file(_download_and_extract(COUNTIES_URL, CACHE_DIR / "county"))
@@ -130,12 +144,12 @@ def cmd_county(county_name: str, state_ident: str) -> int:
         sys.exit(f"No county {county_name!r} in {state_full}.\nAvailable: {choices}")
     if len(matches) > 1:
         sys.exit(f"Multiple counties matched {county_name!r} in {state_full}")
-    bbox = _bbox_4326(matches)
-    _emit(f"{matches.iloc[0]['NAME']} County, {state_full}", bbox)
+    bbox = _bbox_in_crs(matches, target_crs)
+    _emit(f"{matches.iloc[0]['NAME']} County, {state_full}", bbox, target_crs)
     return 0
 
 
-def cmd_place(place_name: str, state_ident: str) -> int:
+def cmd_place(place_name: str, state_ident: str, target_crs: str) -> int:
     states = gpd.read_file(_download_and_extract(STATES_URL, CACHE_DIR / "state"))
     state_full, _, fips = _resolve_state(states, state_ident)
     places_url = PLACE_URL_TEMPLATE.format(fips=fips)
@@ -150,22 +164,43 @@ def cmd_place(place_name: str, state_ident: str) -> int:
     if len(matches) > 1:
         kinds = matches["NAMELSAD"].tolist()
         sys.exit(f"Multiple matches for {place_name!r} in {state_full}: {kinds}")
-    bbox = _bbox_4326(matches)
-    _emit(f"{matches.iloc[0]['NAMELSAD']}, {state_full}", bbox)
+    bbox = _bbox_in_crs(matches, target_crs)
+    _emit(f"{matches.iloc[0]['NAMELSAD']}, {state_full}", bbox, target_crs)
     return 0
 
 
+def _extract_crs_flag(argv: list[str]) -> tuple[list[str], str]:
+    """Pull `--crs <value>` (or `--crs=<value>`) out of argv. Default EPSG:4326."""
+    target_crs = "EPSG:4326"
+    rest: list[str] = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--crs" and i + 1 < len(argv):
+            target_crs = argv[i + 1]
+            i += 2
+            continue
+        if a.startswith("--crs="):
+            target_crs = a.split("=", 1)[1]
+            i += 1
+            continue
+        rest.append(a)
+        i += 1
+    return rest, target_crs
+
+
 def main(argv: list[str]) -> int:
+    argv, target_crs = _extract_crs_flag(argv)
     if len(argv) < 2:
         print(__doc__, file=sys.stderr)
         return 2
     kind = argv[0].lower()
     if kind == "state" and len(argv) == 2:
-        return cmd_state(argv[1])
+        return cmd_state(argv[1], target_crs)
     if kind == "county" and len(argv) == 3:
-        return cmd_county(argv[1], argv[2])
+        return cmd_county(argv[1], argv[2], target_crs)
     if kind == "place" and len(argv) == 3:
-        return cmd_place(argv[1], argv[2])
+        return cmd_place(argv[1], argv[2], target_crs)
     print(__doc__, file=sys.stderr)
     return 2
 

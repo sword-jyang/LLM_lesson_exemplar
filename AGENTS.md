@@ -19,6 +19,7 @@ Every item links to the detailed section below; none are optional.
 6. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
 7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
 8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
+9. **If the user names a state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. See [Resolving named regions to a bbox](#resolving-named-regions-to-a-bbox). For regions outside TIGER (custom AOIs, ecoregions, neighborhoods), ask the user for the bbox.
 
 If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
 
@@ -613,10 +614,21 @@ python scripts/region_extent.py place Boulder CO
 ```
 
 The script downloads (and caches) the relevant Census TIGER 2025 layer,
-filters to the requested feature, reprojects to EPSG:4326, and prints a
-ready-to-paste `target_extent=(xmin, ymin, xmax, ymax)` line. State
-identifiers accept the full name, the 2-letter postal code, or the 2-digit
-FIPS code.
+filters to the requested feature, reprojects, and prints a ready-to-paste
+`target_extent=(xmin, ymin, xmax, ymax)` line. State identifiers accept the
+full name, the 2-letter postal code, or the 2-digit FIPS code.
+
+**Match the bbox CRS to `target_crs`.** `target_extent` and `target_crs` must
+agree — pass `--crs` whenever the workflow uses anything other than EPSG:4326.
+Any CRS pyproj can resolve is accepted (EPSG codes, WKT, proj strings):
+
+```bash
+python scripts/region_extent.py state Colorado --crs <whatever-target_crs-is>
+```
+
+The polygon is reprojected before bounds are taken, so the output tightly
+envelops the feature in the target CRS (corner-reprojection alone would miss
+curvature in projected CRSs).
 
 For anything the helper does not cover — custom AOIs, ecoregions, watersheds,
 study sites, neighborhoods, named features outside TIGER — **ask the user**
