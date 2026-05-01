@@ -275,8 +275,8 @@ body[data-md-color-scheme="slate"] .md-main {
 .md-sidebar--primary .md-nav__title::before {
   content: "";
   display: block;
-  width: 4.6rem;
-  height: 4.6rem;
+  width: 8.6rem;
+  height: 8.6rem;
   margin: 0 auto 0.8rem;
   border-radius: 0.35rem;
   background:
