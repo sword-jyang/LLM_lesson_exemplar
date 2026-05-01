@@ -60,9 +60,31 @@ def expand_template(entry: dict, max_variants: int = 5) -> list[str]:
     return expanded
 
 
+def infer_coverage(entry: dict) -> str:
+    """Infer geographic coverage from name, notes, and topics.
+
+    Returns one of: 'global', 'north-america', 'conus', or 'us' (default).
+    """
+    text = " ".join([
+        entry.get("name", ""),
+        entry.get("notes", ""),
+        entry.get("url", ""),
+        entry.get("url_template", ""),
+        " ".join(entry.get("topics", [])),
+    ]).lower()
+    if "global" in text:
+        return "global"
+    if "north-america" in text or "north america" in text:
+        return "north-america"
+    if "conus" in text or "contiguous" in text or "conterminous" in text:
+        return "conus"
+    return "us"
+
+
 def format_entry(entry: dict) -> str:
     lines = [f"  name:   {entry['name']}"]
     lines.append(f"  type:   {entry.get('type', '?')}")
+    lines.append(f"  coverage: {infer_coverage(entry)}")
     if entry.get("topics"):
         lines.append(f"  topics: {', '.join(entry['topics'])}")
     if "url" in entry:

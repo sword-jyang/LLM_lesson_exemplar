@@ -19,7 +19,7 @@ Every item links to the detailed section below; none are optional.
 6. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
 7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
 8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
-9. **If the user names a state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside TIGER (custom AOIs, ecoregions, neighborhoods), ask the user for a boundary vector file or bounding box.
+9. **If the user names a US state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside the US or outside TIGER (custom AOIs, ecoregions, international locations), see [Regions outside CONUS and international locations](#regions-outside-conus-and-international-locations).
 
 If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
 
@@ -716,6 +716,83 @@ watersheds, study sites, neighborhoods, named features outside TIGER —
 `clip_boundary`, or fall back to a bbox in the target CRS. Guessing is not
 an acceptable fallback; an off-by-half-a-degree extent silently miscrops
 every downstream layer.
+
+### Regions outside CONUS and international locations
+
+The harmonizer works with **any location on Earth** — it is not limited to
+CONUS or the US. However, the worked examples and most catalog entries happen
+to cover CONUS, so the agent must take extra care when a user requests a
+region outside the contiguous United States (including Alaska, Hawaii, US
+territories, and international locations).
+
+#### Region resolution
+
+`scripts/region_extent.py` and the `clip_boundary` shorthand strings
+(`"state:X"`, `"county:X:Y"`, `"place:X:Y"`) use **US Census TIGER** data
+and only resolve US states, counties, and places. **Do not attempt to use
+them for non-US locations** — they will error.
+
+For non-US regions, the agent MUST:
+
+1. **Ask the user** for one of:
+   - A bounding box (`target_extent`) in the target CRS, or
+   - A boundary vector file (GeoJSON, shapefile, GeoPackage) to pass as
+     `clip_boundary`.
+2. **Never fabricate coordinates from model knowledge.** This rule applies
+   globally, not just within the US — an off-by-a-degree extent silently
+   miscrops every downstream layer.
+3. If the user provides a boundary file, use it directly as `clip_boundary`
+   (file-path format). The harmonizer will reproject it to `target_crs`
+   automatically and derive `target_extent` from its bounding box.
+
+**Example — international region with user-provided boundary:**
+
+```python
+workflow = ExampleWorkflow(
+    name="amazon_deforestation",
+    datasets=DATASETS,
+    target_crs="EPSG:4326",
+    target_extent=(-73.5, -18.0, -44.0, 5.3),     # user-provided bbox
+    target_resolution=0.0025,
+    output_dir=OUTPUT_DIR,
+    clip_boundary="data/amazon_basin.geojson",      # user-provided boundary
+)
+```
+
+#### Data catalog awareness
+
+Many datasets in `data_catalog.yml` are US-specific or CONUS-only (e.g.
+NLCD, CDL, LANDFIRE fuel models, MACAv2, MTBS, NClimGrid, Microsoft US
+Building Footprints, Census TIGER boundaries). These datasets **will not
+contain data** for regions outside their geographic scope.
+
+When the user's region is outside CONUS, the agent MUST:
+
+1. **Still check the catalog first** — some entries are global or
+   near-global (Hansen Global Forest Change, ERA5, TerraClimate,
+   NEX-GDDP-CMIP6, Daymet for North America). These work anywhere within
+   their stated coverage.
+2. **Read each matched entry's `notes` and `name` fields** to check for
+   geographic scope keywords (e.g. "CONUS", "US", "North America",
+   "global"). Do not blindly use a CONUS-only URL for a non-CONUS region.
+3. **If no catalog entry covers the user's region**, fall through to:
+   - STAC catalogs (Microsoft Planetary Computer, Earth Search, NASA CMR)
+     for global satellite and climate data,
+   - The ESIIL Data Library for curated examples,
+   - Web search as a last resort.
+4. **Tell the user** when a commonly used dataset (like NLCD) is not
+   available for their region, and suggest global alternatives (e.g.
+   ESA WorldCover or Copernicus Global Land Cover instead of NLCD).
+
+#### CRS selection for non-CONUS regions
+
+- **EPSG:4326** (WGS 84 geographic) works globally and is a safe default.
+- For higher spatial accuracy, use a **UTM zone** appropriate for the
+  region (e.g. `EPSG:32737` for UTM zone 37S in East Africa). Remember
+  that `target_extent` and `target_resolution` must be in meters for
+  projected CRSs.
+- **Do not use CONUS-specific projected CRSs** (e.g. `EPSG:5070` Conus
+  Albers) for regions outside CONUS — the distortion will be severe.
 
 ---
 
