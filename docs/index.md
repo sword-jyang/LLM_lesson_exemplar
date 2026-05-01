@@ -1,31 +1,19 @@
 # Geospatial Harmonization with LLMs
 
-A template for using large language models to harmonize environmental science datasets from user-provided URLs.
+This lesson demonstrates how large language models can help organize, compare, and harmonize environmental datasets from user-provided sources. The example is intentionally small: it gives users a place to test the workflow, inspect the outputs, and understand where the lesson can be adapted for new environmental data problems.
 
-[See Example](examples.md){ .md-button .md-button--primary }
-[View Repository](https://github.com/CU-ESIIL/LLM_lesson_exemplar){ .md-button }
+The site is organized around four entry points. Use **Start Here** if you already have an LLM environment and want the shortest path to running the example. Use **Run on CyVerse** if you are part of the ESIIL network and want the full cloud-based tutorial. Use **Modify the Lesson** if you want to adapt the lesson for a different dataset, prompt, or model. Use **Developer Documentation** if you need the package structure, API reference, or maintenance notes.
 
-<div class="grid cards" markdown>
-
-- **Reference Example**
-
-  ---
-
-  The Colorado fire risk example shows how to harmonize raster, vector, and climate model data into a common grid and visualization.
-
-- **Your Workflows**
-
-  ---
-
-  Create your own analysis in `workflows/`. Each project is self-contained — script and outputs in one folder.
-
-- **Core Library**
-
-  ---
-
-  `src/geospatial_harmonizer.py` handles downloads, reprojection, resampling, rasterization, and visualization. Import it, don't modify it.
-
+<div class="oasis-link-grid" markdown>
+[Start Here](start-here.md){ .md-button .md-button--primary }
+[Run on CyVerse](cyverse.md){ .md-button }
+[Modify the Lesson](modify.md){ .md-button }
+[Developer Documentation](developer-docs.md){ .md-button }
 </div>
 
-!!! note "Template usage"
-    Clone or fork this repository, then add your own analysis scripts to `workflows/`. The `examples/` directory is read-only reference material.
+## Reference example
+
+The reference example shows how an LLM-assisted workflow can reason across raster, vector, and climate-oriented environmental data sources and organize them into a common geospatial analysis pattern.
+
+[Open the reference example](examples/colorado_fire_risk.md){ .md-button .md-button--primary }
+[View the repository](https://github.com/CU-ESIIL/LLM_lesson_exemplar){ .md-button }

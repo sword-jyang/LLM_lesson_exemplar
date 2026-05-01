@@ -7,6 +7,7 @@
   --esiil-accent-green:  #007135;
   --esiil-body-text:     #161A19;
   --esiil-gray:          #E3E3E3;
+  --esiil-gray-relief:   #E3E3E3;
 
   /* Override Material theme palette */
   --md-primary-fg-color:              #234A65;
@@ -136,4 +137,174 @@
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+/* ── Homepage routing grid ──────────────────────────────────────────────── */
+.oasis-link-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.8rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.oasis-link-grid .md-button {
+  text-align: center;
+}
+
+/* ── Native lesson slideshow ────────────────────────────────────────────── */
+.lesson-slideshow {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.lesson-slide {
+  min-height: 68vh;
+  padding: clamp(2rem, 5vw, 4rem);
+  border: 1px solid var(--esiil-gray-relief, #E3E3E3);
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 1rem 2.5rem rgba(22, 26, 25, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.lesson-slide h1 {
+  color: var(--esiil-primary-blue, #234A65);
+  font-size: 3.2rem;
+  line-height: 1.05;
+  letter-spacing: 0;
+  margin-bottom: 1.2rem;
+}
+
+.lesson-slide h2 {
+  color: var(--esiil-accent-green, #007135);
+  font-size: 2.1rem;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.lesson-slide h3 {
+  color: var(--esiil-body-text, #161A19);
+  font-size: 1.45rem;
+  letter-spacing: 0;
+}
+
+.lesson-slide p,
+.lesson-slide li {
+  font-size: 1.15rem;
+  line-height: 1.45;
+}
+
+.lesson-slide ul,
+.lesson-slide ol {
+  margin-top: 0.8rem;
+}
+
+.title-slide,
+.section-slide,
+.closing-slide {
+  background: linear-gradient(135deg, rgba(35, 74, 101, 0.08), rgba(66, 188, 220, 0.10), rgba(0, 113, 53, 0.08));
+}
+
+.title-slide h1,
+.section-slide h1,
+.closing-slide h1 {
+  margin-bottom: 0.6rem;
+}
+
+.slide-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 2rem 0;
+}
+
+.presenter-mode-help {
+  margin-top: 0.75rem;
+  color: rgba(22, 26, 25, 0.75);
+  font-size: 0.95rem;
+}
+
+.lesson-presenter-mode {
+  overflow: hidden;
+}
+
+.lesson-presenter-mode .md-header,
+.lesson-presenter-mode .md-sidebar,
+.lesson-presenter-mode .md-tabs,
+.lesson-presenter-mode .md-footer,
+.lesson-presenter-mode .slide-nav-links,
+.lesson-presenter-mode .presenter-mode-help {
+  display: none !important;
+}
+
+.lesson-presenter-mode .md-main__inner,
+.lesson-presenter-mode .md-content,
+.lesson-presenter-mode .md-content__inner {
+  margin: 0 !important;
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+.lesson-presenter-mode .md-content__inner > h1:first-child {
+  display: none;
+}
+
+.lesson-presenter-mode .lesson-slideshow {
+  margin: 0;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.lesson-presenter-mode .lesson-slide {
+  display: none;
+  min-height: 100vh;
+  width: 100vw;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: clamp(2.5rem, 7vw, 6rem);
+}
+
+.lesson-presenter-mode .lesson-slide.is-active-slide {
+  display: flex;
+}
+
+.lesson-presenter-mode #presenter-mode-toggle {
+  position: fixed;
+  z-index: 9999;
+  right: 1rem;
+  top: 1rem;
+}
+
+@media print {
+  .lesson-slide {
+    min-height: 90vh;
+    page-break-after: always;
+    box-shadow: none;
+  }
+}
+
+@media screen and (max-width: 44rem) {
+  .lesson-slide h1 {
+    font-size: 2.2rem;
+  }
+
+  .lesson-slide h2 {
+    font-size: 1.55rem;
+  }
+
+  .lesson-slide h3 {
+    font-size: 1.2rem;
+  }
+
+  .lesson-slide p,
+  .lesson-slide li {
+    font-size: 1rem;
+  }
 }

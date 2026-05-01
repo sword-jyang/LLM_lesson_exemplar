@@ -10,12 +10,13 @@ hooks:
   - hooks.py
 
 nav:
-  - Site:
-      - Home: index.md
-  - Examples:
-      - Colorado Fire Risk: examples/colorado_fire_risk.md
-  - Reference:
-      - API Reference: examples.md
+  - Home: index.md
+  - Lesson Slides: slides.md
+  - Start Here: start-here.md
+  - Run on CyVerse: cyverse.md
+  - Modify the Lesson: modify.md
+  - Developer Documentation: developer-docs.md
+  - API Reference: examples.md
 
 theme:
   name: material
@@ -42,6 +43,9 @@ markdown_extensions:
 
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - assets/javascripts/lesson-slides.js
 
 plugins:
   - search
