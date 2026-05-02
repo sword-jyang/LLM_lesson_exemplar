@@ -11,6 +11,7 @@ def test_import_geospatial_harmonizer():
     from src.geospatial_harmonizer import (
         DatasetSpec,
         ExampleWorkflow,
+        VizMetadata,
         run_harmonization_example,
         harmonize_raster,
         rasterize_vector_to_grid,

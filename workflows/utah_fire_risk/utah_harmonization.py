@@ -59,6 +59,8 @@ DATASETS = [
     # interpolating between integer class codes (e.g. fuel model 91 ≠ 92).
     DatasetSpec(
         name="fbfm40_fuel_models",
+        display_name="Vegetation and Fuel Types",
+        description="What can burn",
         url="https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip",
         data_type="raster",
         resampling_method="nearest",
@@ -71,6 +73,8 @@ DATASETS = [
     # interpolation (continuous data). Ensemble member r6i1p1 is CCSM4-specific.
     DatasetSpec(
         name="pr_winter_rcp85_ccsm4",
+        display_name="Winter Precipitation",
+        description="Climate moisture conditions (RCP 8.5 projection)",
         url=f"{_THREDDS}/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc",
         data_type="raster",
         netcdf_variable="precipitation",
@@ -78,6 +82,8 @@ DATASETS = [
     ),
     DatasetSpec(
         name="mtbs_burned_areas",
+        display_name="Recent Fire Activity",
+        description="Where fires have occurred (1984\u2013present)",
         url="https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip",
         data_type="vector",
         rasterize=False,
@@ -86,6 +92,8 @@ DATASETS = [
     # not visible at state scale and the raw vector is too large to embed in HTML.
     DatasetSpec(
         name="building_footprints",
+        display_name="Building Density",
+        description="Where people are located",
         url="https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Utah.geojson.zip",
         data_type="vector",
         rasterize=True,

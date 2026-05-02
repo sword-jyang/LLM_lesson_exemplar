@@ -271,6 +271,8 @@ individual datasets. Source of truth: `src/geospatial_harmonizer.py:91`.
 | `burn_value` | `int` | `1` | Value to burn into rasterized vector pixels |
 | `labels_url` | `str \| None` | `None` | URL to a `VALUE,LABEL` CSV for legend labels |
 | `resampling_method` | `Literal["bilinear", "nearest", "cubic"] \| None` | `None` (auto) | Override auto-detect (int dtype → nearest, float → bilinear) |
+| `display_name` | `str \| None` | `None` | Human-readable label for visualization panels (falls back to formatted `name`) |
+| `description` | `str \| None` | `None` | One-line subtitle shown below the panel title (e.g. "What can burn") |
 | `netcdf_variable` | `str \| None` | `None` | NetCDF/OPeNDAP variable name, e.g. `"precipitation"` |
 | `netcdf_months` | `list[int] \| None` | `None` | Month indices to average over, e.g. `[12,1,2,3]` for winter |
 | `secondary_url` | `str \| None` | `None` | Second OPeNDAP URL for derived variables (e.g. `rhsmin` for VPD) |

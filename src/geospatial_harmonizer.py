@@ -88,6 +88,20 @@ def _format_layer_name(name: str) -> str:
     return " ".join(result)
 
 
+def _get_display_name(name: str, metadata: "VizMetadata | None") -> str:
+    """Return display_name from metadata if available, else format the raw name."""
+    if metadata and metadata.display_names and name in metadata.display_names:
+        return metadata.display_names[name]
+    return _format_layer_name(name)
+
+
+def _get_description(name: str, metadata: "VizMetadata | None") -> str | None:
+    """Return description subtitle from metadata if available."""
+    if metadata and metadata.descriptions and name in metadata.descriptions:
+        return metadata.descriptions[name]
+    return None
+
+
 @dataclass
 class DatasetSpec:
     name: str
@@ -105,6 +119,8 @@ class DatasetSpec:
     netcdf_variable: str | None = None  # Variable name in primary NetCDF (e.g. "tasmax")
     netcdf_months: list[int] | None = None  # Months to average over, e.g. [12,1,2,3] for winter
     resampling_method: Literal["bilinear", "nearest", "cubic"] | None = None  # None = auto-detect from data_type
+    display_name: str | None = None  # Human-readable label for visualization panels (falls back to name)
+    description: str | None = None   # One-line subtitle shown below the panel title
     # STAC fields — set is_stac=True to discover and download via a STAC catalog
     is_stac: bool = False
     stac_collection: str | None = None   # e.g. "sentinel-2-l2a"
@@ -146,6 +162,20 @@ class GridSpec:
     transform: object
     # Shapely geometry for boundary clipping.  None = rectangular bbox only.
     clip_geometry: object | None = None
+
+
+@dataclass
+class VizMetadata:
+    """Optional metadata passed to create_visualization for richer output."""
+    title: str                              # e.g. "Colorado Fire Risk"
+    crs: str                                # e.g. "EPSG:4326"
+    resolution: float                       # in CRS units (degrees or meters)
+    extent: BBox                            # (xmin, ymin, xmax, ymax)
+    display_names: dict[str, str] | None = None  # dataset name → plain label
+    descriptions: dict[str, str] | None = None   # dataset name → subtitle text
+    summary: str | None = None               # paragraph summary for the bottom panel
+    boundary_geometry: object | None = None  # Shapely geometry for boundary overlay
+
 
 
 def _log(msg: str, verbose: bool) -> None:
@@ -1295,16 +1325,28 @@ HARMONIZED_VIZ_PNG = "harmonized_visualization.png"
 HARMONIZED_VIZ_HTML = "harmonized_visualization.html"
 
 
-def create_visualization(outputs: list[tuple[str, Path]], output_dir: Path, verbose: bool = True) -> Path | None:
+def create_visualization(
+    outputs: list[tuple[str, Path]],
+    output_dir: Path,
+    verbose: bool = True,
+    *,
+    metadata: VizMetadata | None = None,
+) -> Path | None:
     """Create a static PNG visualization with subplots for each layer.
 
     The filename is hardcoded to ``harmonized_visualization.png`` (see
     HARMONIZED_VIZ_PNG above). Pass the project's ``output_dir``; the function
     writes the PNG inside it.
+
+    Parameters
+    ----------
+    metadata : VizMetadata, optional
+        When provided, adds a title, scale bars, unit labels, and a summary
+        footer to the PNG. Backwards compatible — omit for legacy behavior.
     """
     output_path = output_dir / HARMONIZED_VIZ_PNG
     try:
-        return _create_visualization_impl(outputs, output_path, verbose)
+        return _create_visualization_impl(outputs, output_path, verbose, metadata=metadata)
     except Exception as e:
         _log(f"Error creating visualization: {e}", verbose)
         import traceback
@@ -1330,97 +1372,163 @@ def _load_color_map_from_output_dir(output_path: Path) -> None:
             break
 
 
-def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Path, verbose: bool = True) -> Path:
+def _create_visualization_impl(
+    outputs: list[tuple[str, Path]],
+    output_path: Path,
+    verbose: bool = True,
+    *,
+    metadata: VizMetadata | None = None,
+) -> Path:
     """Internal implementation of PNG visualization creation."""
     _log("Creating visualization", verbose)
     _load_color_map_from_output_dir(output_path)
 
     from matplotlib.gridspec import GridSpec
-    from matplotlib.patches import Patch
+    from matplotlib.patches import FancyBboxPatch, Patch
+
+    _LETTER_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
     n = len(outputs)
     # Use 2-column layout for 4 datasets, otherwise cap at 3
     cols = 2 if n == 4 else min(3, n)
     rows = (n + cols - 1) // cols
 
-    # Extra row at the bottom for the composite overlay panel.
-    # The composite row height is set to roughly match the data's geographic
-    # aspect ratio so it does not appear "super wide".
-    fig = plt.figure(figsize=(8 * cols, 6 * rows + 5))
-    gs = GridSpec(rows + 1, cols, figure=fig, hspace=0.4, wspace=0.3,
-                  height_ratios=[6] * rows + [5])
-    axes = [fig.add_subplot(gs[i // cols, i % cols]) for i in range(n)]
-    # Hide unused panel slots in the last per-layer row
+    # Layout: per-layer panels in a grid, composite + summary in the bottom row
+    # Use a 10-column grid so the bottom row can split 5:5 (map left, info right)
+    fig = plt.figure(figsize=(8 * cols, 6 * rows + 6))
+    gs = GridSpec(rows + 1, 10, figure=fig, hspace=0.5, wspace=0.4,
+                  height_ratios=[6] * rows + [6])
+    # Per-layer panels: map to the 10-column grid based on actual cols
+    _col_map = {
+        2: [(0, 5), (5, 10)],
+        3: [(0, 3), (3, 7), (7, 10)],
+    }
+    _spans = _col_map.get(cols, [(i * (10 // cols), (i + 1) * (10 // cols)) for i in range(cols)])
+    axes = []
+    for i in range(n):
+        r, c = i // cols, i % cols
+        s0, s1 = _spans[c]
+        axes.append(fig.add_subplot(gs[r, s0:s1]))
     for i in range(n, rows * cols):
-        fig.add_subplot(gs[i // cols, i % cols]).set_visible(False)
-    # Composite panel spans the full width of the last row
-    ax_composite = fig.add_subplot(gs[rows, :])
+        r, c = i // cols, i % cols
+        s0, s1 = _spans[c]
+        fig.add_subplot(gs[r, s0:s1]).set_visible(False)
+    # Bottom row: composite map (left 5 cols) + info panel (right 5 cols)
+    ax_composite = fig.add_subplot(gs[rows, 0:5])
+    ax_info = fig.add_subplot(gs[rows, 5:10])
+
+    # Overall title + subtitle
+    if metadata:
+        fig.suptitle(metadata.title, fontsize=22, fontweight='bold', y=0.98)
+        fig.subplots_adjust(top=0.93)
+
+    # Determine CRS string for scale bars (from metadata or from first raster)
+    _scale_crs = metadata.crs if metadata else None
+    _scale_extent = metadata.extent if metadata else None
+    _boundary = metadata.boundary_geometry if metadata else None
+
+    def _add_panel_frame(ax):
+        """Draw a rounded border around a panel."""
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_edgecolor('#444444')
+            spine.set_linewidth(1.5)
+
+    def _add_letter_label(ax, letter):
+        """Add a circled letter label (A, B, C...) in the upper-left corner."""
+        ax.text(0.03, 0.95, letter, transform=ax.transAxes,
+                fontsize=13, fontweight='bold', va='top', ha='left',
+                bbox=dict(boxstyle='circle,pad=0.3', facecolor='white',
+                          edgecolor='#333333', linewidth=1.5),
+                zorder=100)
 
     for i, (name, path) in enumerate(outputs):
         _log(f"  Processing layer {i+1}/{len(outputs)}: {name}", verbose)
         ax = axes[i]
-        
+        display = _get_display_name(name, metadata)
+        layer_bounds = None
+
         # Handle vector files
         if path.suffix.lower() in ['.geojson', '.json', '.shp']:
-            # Get styling for vector layer
             style = _get_vector_style(name)
-            
-            # Read vector data
             gdf = gpd.read_file(path)
-            
-            # Plot the vector data
             gdf.plot(ax=ax, color=style["color"], edgecolor='black',
                     linewidth=0.5, alpha=style["fillOpacity"])
-            
-            ax.set_title(_format_layer_name(name))
+
+            # Legend for vector panel
+            legend_patch = Patch(facecolor=style["color"], edgecolor='black',
+                                alpha=style["fillOpacity"], label=display)
+            ax.legend(handles=[legend_patch], loc='upper left',
+                      bbox_to_anchor=(1.01, 1), borderaxespad=0,
+                      fontsize=10, framealpha=0.95, edgecolor='#cccccc')
+
+            desc = _get_description(name, metadata)
+            title_str = f"{display}\n{desc}" if desc else display
+            ax.set_title(title_str, fontsize=14, fontweight='bold', pad=8,
+                         linespacing=1.6)
+            if desc:
+                # Make subtitle lighter
+                ax.title.set_fontsize(12)
             ax.axis("off")
+
+            # Boundary overlay
+            if _boundary is not None:
+                try:
+                    _add_boundary_overlay(ax, _boundary, data_shape=None,
+                                          extent=gdf.total_bounds)
+                except Exception:
+                    pass
+
+            # Scale bar + frame + letter
+            tb = gdf.total_bounds
+            layer_bounds = (tb[0], tb[1], tb[2], tb[3])
+            crs_for_bar = _scale_crs or (gdf.crs.to_string() if gdf.crs else None)
+            if layer_bounds and crs_for_bar:
+                _add_scale_bar(ax, layer_bounds, crs_for_bar)
+            _add_panel_frame(ax)
+            _add_letter_label(ax, _LETTER_LABELS[i])
             continue
 
         # Handle raster files
         with rasterio.open(path) as src:
             data = src.read(1)
-        
-        # Get styling for this layer
+            bnds = src.bounds
+            layer_bounds = (bnds.left, bnds.bottom, bnds.right, bnds.top)
+            if _scale_crs is None:
+                _scale_crs = src.crs.to_string() if src.crs else None
+
+        # imshow extent in [left, right, bottom, top] — renders in geo-coordinates
+        raster_extent = [bnds.left, bnds.right, bnds.bottom, bnds.top]
+
         style = _get_layer_style(name, data, i)
-        
+
         if style["solid_color"] is not None:
-            # Binary data - use solid color with transparency
-            # Show color where data == 1, transparent where data == 0
             rgba_image = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.float32)
             r, g, b, a = style["solid_color"]
             rgba_image[:, :, 0] = r
             rgba_image[:, :, 1] = g
             rgba_image[:, :, 2] = b
-            # Alpha: 1 where data == 1, 0 where data == 0
             rgba_image[:, :, 3] = (data == 1).astype(float) * style["alpha"]
-            
-            ax.imshow(rgba_image, origin='upper')
-            
-            # Add legend for binary data
-            from matplotlib.patches import Patch
-            legend_elements = [Patch(facecolor=(r, g, b, a), label='Present (1)')]
-            ax.legend(handles=legend_elements, loc='upper right', fontsize=8)
+            ax.imshow(rgba_image, origin='upper', extent=raster_extent, aspect='equal')
+
+            legend_elements = [Patch(facecolor=(r, g, b, a), label=display)]
+            ax.legend(handles=legend_elements, loc='upper left',
+                      bbox_to_anchor=(1.01, 1), borderaxespad=0,
+                      fontsize=10, framealpha=0.95, edgecolor='#cccccc')
         else:
-            # Continuous/categorical data - use colormap
             import matplotlib.cm as cm
             from matplotlib.colors import BoundaryNorm, ListedColormap
-            
+
             vmin = style["vmin"] if style["vmin"] is not None else np.nanmin(data)
             vmax = style["vmax"] if style["vmax"] is not None else np.nanmax(data)
-            
-            # Check if this is categorical/discrete data (like fuel models)
             unique_vals = np.unique(data[data > 0])
-            is_categorical = len(unique_vals) > 20  # Many unique values suggests categorical
-            
-            # Mask out zeros for better visualization
+            is_categorical = len(unique_vals) > 20
             masked_data = np.ma.masked_equal(data, 0)
-            
+
             if is_categorical and "fbfm" in name.lower():
                 import src.geospatial_harmonizer as _self
-                from matplotlib.patches import Patch
                 labels_map = _self.DISCOVERED_LABELS or {}
                 all_cats = sorted([int(v) for v in unique_vals.tolist()])
-                # Build colormap from ALL present values so no pixels are masked/white
                 if "color_map" in style and style["color_map"]:
                     color_map = style["color_map"]
                     colors = [(color_map[c][0]/255, color_map[c][1]/255, color_map[c][2]/255)
@@ -1429,8 +1537,8 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
                     cmap = ListedColormap(colors)
                     color_bounds = [c - 0.5 for c in all_cats] + [all_cats[-1] + 0.5]
                     norm = BoundaryNorm(color_bounds, cmap.N)
-                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
-                    # Patch legend: only named categories, in order, 2 columns
+                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"],
+                                   extent=raster_extent, aspect='equal')
                     named_cats = [c for c in all_cats if labels_map.get(c, str(c)) != str(c) and c in color_map]
                     legend_handles = [
                         Patch(facecolor=(color_map[c][0]/255, color_map[c][1]/255, color_map[c][2]/255),
@@ -1442,7 +1550,8 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
                     cmap = cm.get_cmap("nipy_spectral", n_colors)
                     color_bounds = [c - 0.5 for c in all_cats] + [all_cats[-1] + 0.5]
                     norm = BoundaryNorm(color_bounds, cmap.N)
-                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"])
+                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"],
+                                   extent=raster_extent, aspect='equal')
                     named_cats = [c for c in all_cats if labels_map.get(c, str(c)) != str(c)]
                     legend_handles = [
                         Patch(facecolor=cmap(norm(c)), label=labels_map[c])
@@ -1451,21 +1560,45 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
                 ax.legend(
                     handles=legend_handles,
                     loc='upper left', bbox_to_anchor=(1.01, 1), borderaxespad=0,
-                    fontsize=5.5, ncol=2, frameon=True,
-                    title='Fuel Model', title_fontsize=6,
+                    fontsize=10, ncol=2, frameon=True, edgecolor='#cccccc',
+                    title='Fuel Model', title_fontsize=10,
                     handlelength=1, handleheight=1, handletextpad=0.4, columnspacing=0.5,
                 )
             else:
                 cmap = cm.get_cmap(style["colormap"])
-                # Mask out zeros for better visualization
                 masked_data = np.ma.masked_equal(data, 0)
-                im = ax.imshow(masked_data, cmap=cmap, vmin=vmin, vmax=vmax, alpha=style["alpha"])
-                plt.colorbar(im, ax=ax, shrink=0.6)
-        
-        ax.set_title(_format_layer_name(name))
+                im = ax.imshow(masked_data, cmap=cmap, vmin=vmin, vmax=vmax, alpha=style["alpha"],
+                               extent=raster_extent, aspect='equal')
+                cb = plt.colorbar(im, ax=ax, shrink=0.6, aspect=20)
+                units = style.get("units", "")
+                if units:
+                    cb.set_label(units, fontsize=10)
+                # High/Low labels on colorbar
+                cb.ax.text(0.5, 1.02, "High", transform=cb.ax.transAxes,
+                           ha='center', va='bottom', fontsize=10, fontweight='bold')
+                cb.ax.text(0.5, -0.02, "Low", transform=cb.ax.transAxes,
+                           ha='center', va='top', fontsize=10, fontweight='bold')
+
+        # Boundary overlay — now in geo-coordinates (same space as imshow extent)
+        if _boundary is not None:
+            try:
+                _add_boundary_overlay(ax, _boundary, extent=raster_extent)
+            except Exception:
+                pass
+
+        desc = _get_description(name, metadata)
+        title_str = f"{display}\n{desc}" if desc else display
+        ax.set_title(title_str, fontsize=14, fontweight='bold', pad=8,
+                     linespacing=1.6)
         ax.axis("off")
 
-    # Composite overlay: all layers stacked on ax_composite
+        # Scale bar + frame + letter
+        if layer_bounds and _scale_crs:
+            _add_scale_bar(ax, layer_bounds, _scale_crs)
+        _add_panel_frame(ax)
+        _add_letter_label(ax, _LETTER_LABELS[i])
+
+    # ── Composite overlay panel ──────────────────────────────────────────
     import matplotlib.cm as cm
     from matplotlib.colors import BoundaryNorm, ListedColormap
 
@@ -1473,7 +1606,7 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
     composite_legend_handles = []
 
     for i, (layer_name, path) in enumerate(outputs):
-        label = _format_layer_name(layer_name)
+        label = _get_display_name(layer_name, metadata)
         if path.suffix.lower() in ['.geojson', '.json', '.shp']:
             style = _get_vector_style(layer_name)
             gdf = gpd.read_file(path)
@@ -1527,33 +1660,99 @@ def _create_visualization_impl(outputs: list[tuple[str, Path]], output_path: Pat
                         (color_map[mid][0] / 255, color_map[mid][1] / 255, color_map[mid][2] / 255)
                         if mid in color_map else (0.5, 0.5, 0.5)
                     )
+                    # Simplified legend entry for categorical data
                     composite_legend_handles.append(
-                        Patch(facecolor=mid_color, alpha=style["alpha"],
-                              label=f"{label} (see detail panel for full legend)")
+                        Patch(facecolor='#8B9D4B', alpha=0.8,
+                              label=f"{label}")
                     )
                 else:
                     cmap_obj = cm.get_cmap(style["colormap"])
                     ax_composite.imshow(masked_data, cmap=cmap_obj, vmin=vmin, vmax=vmax,
                                         extent=img_extent, aspect='equal', origin='upper',
                                         alpha=style["alpha"], zorder=i + 1)
+                    # Two-tone legend: show Low and High ends of colormap
+                    units = style.get("units", "")
+                    legend_label = f"{label} ({units})" if units else label
                     composite_legend_handles.append(
-                        Patch(facecolor=cmap_obj(0.5), alpha=style["alpha"], label=label)
+                        Patch(facecolor=cmap_obj(0.2), alpha=style["alpha"],
+                              label=f"  {legend_label} \u2014 Low")
+                    )
+                    composite_legend_handles.append(
+                        Patch(facecolor=cmap_obj(0.8), alpha=style["alpha"],
+                              label=f"  {legend_label} \u2014 High")
                     )
 
-    layer_names = ", ".join(_format_layer_name(ln) for ln, _ in outputs)
-    ax_composite.set_title(f"Combined View: {layer_names}", fontsize=10, pad=8)
+    # Boundary overlay on composite
+    if _boundary is not None and img_extent is not None:
+        try:
+            _add_boundary_overlay(ax_composite, _boundary, extent=img_extent)
+        except Exception:
+            pass
+
+    composite_title = metadata.title if metadata else "Combined View"
+    ax_composite.set_title(
+        f"{composite_title} \u2014 All Layers",
+        fontsize=14, fontweight='bold', pad=8,
+    )
     ax_composite.axis("off")
+
+    # Scale bar + north arrow + frame + letter on composite
+    composite_bounds = _scale_extent or (img_extent and (img_extent[0], img_extent[2], img_extent[1], img_extent[3]))
+    if composite_bounds and _scale_crs:
+        _add_scale_bar(ax_composite, composite_bounds, _scale_crs)
+    _add_north_arrow(ax_composite)
+    _add_panel_frame(ax_composite)
+    _add_letter_label(ax_composite, _LETTER_LABELS[n])
+
+    # ── Info panel: legend + summary (right side of bottom row) ─────────
+    ax_info.axis("off")
+    _add_panel_frame(ax_info)
+
     if composite_legend_handles:
-        ax_composite.legend(
+        ax_info.legend(
             handles=composite_legend_handles,
             loc='upper left',
-            bbox_to_anchor=(1.01, 1),
-            borderaxespad=0,
-            fontsize=8,
+            bbox_to_anchor=(0.05, 0.95),
+            fontsize=10,
             frameon=True,
-            title="Layers",
-            title_fontsize=9,
+            edgecolor='#cccccc',
+            fancybox=True,
+            title="Map Layers",
+            title_fontsize=12,
         )
+
+    # Summary text
+    if metadata and metadata.summary:
+        import textwrap
+        wrapped = "\n".join(textwrap.wrap(metadata.summary, width=45))
+        ax_info.text(
+            0.05, 0.35, "Summary",
+            transform=ax_info.transAxes,
+            fontsize=14, fontweight='bold', va='top', ha='left',
+        )
+        ax_info.text(
+            0.05, 0.28, wrapped,
+            transform=ax_info.transAxes,
+            fontsize=11, va='top', ha='left',
+            linespacing=1.5,
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f8f8',
+                      edgecolor='#dddddd', linewidth=0.8),
+        )
+
+    # Footer with CRS/resolution info
+    if metadata:
+        crs = metadata.crs
+        res = metadata.resolution
+        if res < 1:
+            res_label = f"{res}\u00b0"
+        else:
+            res_label = f"{res:.0f} m"
+        footer = (
+            f"Harmonized to {crs}  \u00b7  {res_label} resolution  \u00b7  "
+            f"{len(outputs)} layer{'s' if len(outputs) != 1 else ''}"
+        )
+        fig.text(0.5, 0.005, footer, ha='center', va='bottom',
+                 fontsize=11, color='#555555', style='italic')
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -1723,6 +1922,126 @@ def _get_vector_style(name: str) -> dict:
             "weight": 2,
             "fillOpacity": 0.5,
         }
+
+
+def _compute_scale_info(bounds: tuple, crs_str: str) -> tuple[float, float]:
+    """Return (map_width_m, meters_per_crs_unit) for a given extent and CRS."""
+    import math
+    import pyproj
+
+    xmin, ymin, xmax, ymax = bounds
+    crs = pyproj.CRS(crs_str)
+    if crs.is_geographic:
+        mid_lat = (ymin + ymax) / 2
+        meters_per_unit = 111_320 * math.cos(math.radians(mid_lat))
+    else:
+        meters_per_unit = 1.0
+    return (xmax - xmin) * meters_per_unit, meters_per_unit
+
+
+def _add_scale_bar(ax, bounds: tuple, crs_str: str) -> None:
+    """Draw a numbered scale bar in the lower-right corner of *ax*.
+
+    Style: ``0 ── 25 ── 50 ── 75 ── 100 km`` with alternating black/white
+    segments for readability.
+    """
+    map_width_m, _ = _compute_scale_info(bounds, crs_str)
+
+    # Choose a "nice" total bar length ≈ 20% of map width
+    nice_lengths_m = [
+        100, 200, 500, 1_000, 2_000, 5_000, 10_000, 25_000,
+        50_000, 100_000, 200_000, 500_000, 1_000_000, 2_000_000,
+    ]
+    target = map_width_m * 0.2
+    bar_m = min(nice_lengths_m, key=lambda x: abs(x - target))
+    bar_frac = bar_m / map_width_m
+
+    n_segments = 4
+    seg_frac = bar_frac / n_segments
+
+    if bar_m >= 1_000:
+        unit = "km"
+        divisor = 1_000
+    else:
+        unit = "m"
+        divisor = 1
+
+    # Position: lower-right
+    x_left = 0.95 - bar_frac
+    y_pos = 0.05
+    bar_h = 0.012
+
+    for s in range(n_segments):
+        x0 = x_left + s * seg_frac
+        x1 = x0 + seg_frac
+        color = 'black' if s % 2 == 0 else 'white'
+        ax.fill_between(
+            [x0, x1], y_pos - bar_h, y_pos + bar_h,
+            transform=ax.transAxes, color=color, edgecolor='black',
+            linewidth=0.5, clip_on=False, zorder=99,
+        )
+
+    # Tick labels: 0 and total
+    for val, x in [(0, x_left), (bar_m / divisor, x_left + bar_frac)]:
+        ax.text(x, y_pos - bar_h - 0.015, f"{val:.0f}",
+                transform=ax.transAxes, ha='center', va='top',
+                fontsize=10, fontweight='bold',
+                bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                          edgecolor='none', alpha=0.7))
+    # Unit label
+    ax.text(x_left + bar_frac + 0.015, y_pos, unit,
+            transform=ax.transAxes, ha='left', va='center',
+            fontsize=10, fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                      edgecolor='none', alpha=0.7))
+
+
+def _add_north_arrow(ax, x: float = 0.05, y: float = 0.12) -> None:
+    """Draw a north arrow at (x, y) in axes-fraction coordinates."""
+    ax.annotate(
+        'N', xy=(x, y), xytext=(x, y - 0.07),
+        transform=ax.transAxes, ha='center', va='center',
+        fontsize=10, fontweight='bold',
+        arrowprops=dict(arrowstyle='->', lw=1.5, color='black'),
+    )
+
+
+def _add_boundary_overlay(ax, geometry, data_shape: tuple | None = None,
+                          extent: tuple | None = None,
+                          raster_bounds: tuple | None = None) -> None:
+    """Overlay a boundary polygon outline on an axes.
+
+    For panels with a geo-extent (composite, vector), the boundary is drawn
+    in data coordinates. For raster panels (imshow without extent), the
+    boundary is rasterized to pixel coordinates using *raster_bounds*.
+    """
+    if geometry is None:
+        return
+
+    if extent is not None:
+        # Data coordinates — draw directly
+        xs, ys = geometry.exterior.coords.xy
+        ax.plot(xs, ys, color='#333333', linewidth=1.2, linestyle='-',
+                zorder=50, alpha=0.8)
+        for interior in geometry.interiors:
+            xs, ys = interior.coords.xy
+            ax.plot(xs, ys, color='#333333', linewidth=0.8, linestyle='-',
+                    zorder=50, alpha=0.8)
+    elif data_shape is not None:
+        # Pixel coordinates — rasterize boundary using the raster's own
+        # bounds so the mask aligns exactly with imshow output.
+        from rasterio.features import rasterize as _rasterize
+        from rasterio.transform import from_bounds
+        h, w = data_shape
+        if raster_bounds is not None:
+            bx0, by0, bx1, by1 = raster_bounds
+        else:
+            bx0, by0, bx1, by1 = geometry.bounds
+        tf = from_bounds(bx0, by0, bx1, by1, w, h)
+        mask = _rasterize([(geometry, 1)], out_shape=(h, w), transform=tf,
+                          fill=0, dtype='uint8')
+        ax.contour(mask, levels=[0.5], colors=['#333333'], linewidths=[1.2],
+                   origin='upper', zorder=50, alpha=0.8)
 
 
 def create_interactive_visualization(
@@ -2375,7 +2694,35 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
         # Filenames are hardcoded inside create_visualization /
         # create_interactive_visualization (see HARMONIZED_VIZ_PNG / _HTML)
         # so the website build hook can find them.
-        create_visualization(viz_inputs, workflow.output_dir, workflow.verbose)
+        _d_names = {ds.name: ds.display_name for ds in workflow.datasets
+                    if ds.display_name is not None} or None
+        _d_descs = {ds.name: ds.description for ds in workflow.datasets
+                    if ds.description is not None} or None
+        # Auto-generate a summary from metadata
+        _title = _format_layer_name(workflow.name)
+        _res = workflow.target_resolution
+        _res_label = f"{_res}\u00b0" if _res < 1 else f"{_res:.0f} m"
+        _layer_list = ", ".join(
+            ds.display_name or _format_layer_name(ds.name)
+            for ds in workflow.datasets
+        )
+        _auto_summary = (
+            f"This visualization harmonizes {len(workflow.datasets)} geospatial "
+            f"datasets to a common grid ({workflow.target_crs}, {_res_label} "
+            f"resolution). Layers include: {_layer_list}."
+        )
+        viz_meta = VizMetadata(
+            title=_title,
+            crs=workflow.target_crs,
+            resolution=workflow.target_resolution,
+            extent=workflow.target_extent,
+            display_names=_d_names,
+            descriptions=_d_descs,
+            summary=_auto_summary,
+            boundary_geometry=clip_geom,
+        )
+        create_visualization(viz_inputs, workflow.output_dir, workflow.verbose,
+                             metadata=viz_meta)
         interactive_map = create_interactive_visualization(
             viz_inputs,
             workflow.target_extent,
