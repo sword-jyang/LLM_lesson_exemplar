@@ -1,5 +1,7 @@
 # Run on CyVerse
 
+![ESIIL, CyVerse, AI Infrastructure, and AI Verde banner.](assets/images/cyverse/cyverse-verde-banner.png)
+
 This tutorial is for ESIIL network learners who want to run the lesson in a CyVerse cloud environment rather than on their own laptop. CyVerse gives you a browser-based workspace with compute, storage, and a terminal already available, which is helpful when you do not want to install everything locally or when you want the whole group to work in the same environment.
 
 By the end of this page, you will have launched a CyVerse analysis, opened a working session, connected the session to GitHub, cloned the lesson repository, added your LLM credentials safely, run the reference workflow, and checked the output files.

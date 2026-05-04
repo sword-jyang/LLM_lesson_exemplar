@@ -59,6 +59,7 @@ extra_css:
 
 extra_javascript:
   - assets/javascripts/lesson-slides.js
+  - assets/javascripts/cyverse-toc.js
 
 plugins:
   - search

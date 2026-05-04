@@ -270,6 +270,57 @@ body[data-md-color-scheme="slate"] .md-main {
   display: none;
 }
 
+/* --------------------------------------------------------------------------
+   CyVerse guide right rail
+   Restores a calm page table of contents for the long CyVerse workshop page.
+   -------------------------------------------------------------------------- */
+@media screen and (min-width: 76.25em) {
+  body.oasis-cyverse-page .md-sidebar--secondary {
+    display: block !important;
+    width: 13.5rem;
+  }
+
+  body.oasis-cyverse-page .md-sidebar--secondary .md-sidebar__scrollwrap {
+    border-left: 1px solid rgba(22, 26, 25, 0.10);
+    padding-left: 0.85rem;
+    scrollbar-width: thin;
+  }
+
+  body.oasis-cyverse-page .md-sidebar--secondary .md-nav__title {
+    color: var(--esiil-accent-green);
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1.2;
+    padding-bottom: 0.45rem;
+    text-transform: none;
+  }
+
+  body.oasis-cyverse-page .md-sidebar--secondary .md-nav__link {
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    color: rgba(22, 26, 25, 0.72);
+    font-size: 0.76rem;
+    line-height: 1.28;
+    padding: 0.22rem 0 0.22rem 0.55rem;
+  }
+
+  body.oasis-cyverse-page .md-sidebar--secondary .md-nav__link:hover,
+  body.oasis-cyverse-page .md-sidebar--secondary .md-nav__link:focus,
+  body.oasis-cyverse-page .md-sidebar--secondary .md-nav__link--active {
+    border-left-color: var(--esiil-accent-blue);
+    color: var(--esiil-accent-green);
+    font-weight: 700;
+  }
+
+  body[data-md-color-scheme="slate"].oasis-cyverse-page .md-sidebar--secondary .md-sidebar__scrollwrap {
+    border-left-color: rgba(227, 227, 227, 0.18);
+  }
+
+  body[data-md-color-scheme="slate"].oasis-cyverse-page .md-sidebar--secondary .md-nav__link {
+    color: rgba(245, 250, 249, 0.68);
+  }
+}
+
 @media screen and (min-width: 76.25em) {
   .md-main__inner {
     gap: 1.2rem;
