@@ -1,5 +1,7 @@
 # Geospatial Harmonization with LLMs
 
+![Watercolor mountain banner for the Geospatial Harmonization with LLMs home page.](assets/images/heroes/home-hero.png){ .page-hero }
+
 This lesson demonstrates how large language models can help organize, compare, and harmonize environmental datasets from user-provided sources. The example is intentionally small: it gives users a place to test the workflow, inspect the outputs, and understand where the lesson can be adapted for new environmental data problems.
 
 The site is organized around four entry points. Use **Start Here** if you already have an LLM environment and want the shortest path to running the example. Use **Run on CyVerse** if you are part of the ESIIL network and want the full cloud-based tutorial. Use **Modify the Lesson** if you want to adapt the lesson for a different dataset, prompt, or model. Use **Developer Documentation** if you need the package structure, API reference, or maintenance notes.

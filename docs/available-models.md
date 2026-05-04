@@ -1,5 +1,7 @@
 # Available Models
 
+![Available Models banner with connected model nodes and cube icon.](assets/images/heroes/available-models-hero.png){ .page-hero }
+
 This page is a field guide to the AI models available through your API key. It is written for people who may not already know these model families, but who need to make informed choices about scientific work, reproducibility, cost, transparency, and capability.
 
 Think of these models as different research instruments. Some are fast and lightweight. Some are large and capable. Some can look at images. Some are better for long documents. Some publish enough information to support scientific interpretation, while others should be treated as black-box services.

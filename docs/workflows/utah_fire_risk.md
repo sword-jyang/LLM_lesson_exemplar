@@ -1,5 +1,7 @@
 # Utah Fire Risk
 
+![Workflows outputs banner with connected workflow nodes and checked document icon.](../assets/images/heroes/workflows-hero.png){ .page-hero }
+
 Harmonizes fire behavior fuel models, winter precipitation projections, historical burned areas, and building footprints for Utah to assess fire risk factors.
 
 ---

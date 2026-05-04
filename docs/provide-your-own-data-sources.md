@@ -1,5 +1,7 @@
 # Provide Your Own Data Sources
 
+![Provide Your Own Data Sources banner with database and data-flow icons.](assets/images/heroes/provide-data-sources-hero.png){ .page-hero }
+
 This tutorial shows one specific workflow for getting a direct download URL from a web data source and giving that URL to the LLM workflow. The example here uses PAD-US data for Alabama from USGS ScienceBase.
 
 This page is not a general catalog-search guide. It is a click-by-click record of the workflow shown in the tutorial directions. Use it when you already know which dataset you want and you need the direct downloadable file URL that the LLM or workflow can use.

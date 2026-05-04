@@ -161,6 +161,21 @@ body[data-md-color-scheme="slate"] .md-main {
   max-width: 68ch;
 }
 
+.md-typeset img.page-hero {
+  display: block;
+  width: 100%;
+  max-height: 8rem;
+  margin: 0.4rem 0 1.4rem;
+  border-radius: 0.3rem;
+  object-fit: cover;
+  object-position: center;
+}
+
+.md-typeset img.cyverse-hero {
+  max-height: 18rem;
+  object-fit: contain;
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 /* Matched from esiil.org CSS:
    default  → left-to-right  #42BCDC 0 % → #47BF7F 60 %  (black text)
@@ -275,8 +290,31 @@ body[data-md-color-scheme="slate"] .md-main {
    Restores a calm page table of contents for the long CyVerse workshop page.
    -------------------------------------------------------------------------- */
 @media screen and (min-width: 76.25em) {
+  body.oasis-cyverse-page .md-main__inner {
+    column-gap: 0;
+    margin-left: 0;
+    margin-right: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  body.oasis-cyverse-page .md-sidebar--primary {
+    left: 0;
+    transform: none;
+  }
+
+  body.oasis-cyverse-page .md-content {
+    margin-left: 0;
+  }
+
+  body.oasis-cyverse-page .md-content__inner {
+    margin-left: 1.2rem;
+    margin-right: 1.2rem;
+  }
+
   body.oasis-cyverse-page .md-sidebar--secondary {
     display: block !important;
+    margin-left: auto;
     width: 13.5rem;
   }
 
