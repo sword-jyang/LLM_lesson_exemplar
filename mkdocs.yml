@@ -2,7 +2,7 @@ site_name: "Geospatial Harmonization with LLMs"
 site_description: "A template for using LLMs to harmonize environmental science datasets"
 site_url: "https://cu-esiil.github.io/LLM_lesson_exemplar/"
 
-repo_name: "CU-ESIIL/LLM_lesson_exemplar"
+repo_name: "link to repository"
 repo_url: "https://github.com/CU-ESIIL/LLM_lesson_exemplar"
 edit_uri: "edit/main/docs/"
 
@@ -16,6 +16,7 @@ nav:
   - LLM Guide:
       - Lesson Slides: slides.md
       - Available Models: available-models.md
+      - Provide Your Own Data Sources: provide-your-own-data-sources.md
       - Agents and Systems: agents-and-systems.md
       - LLM Hosting and Data Centers: ai-infrastructure/llm-hosting-data-centers.md
       - Developer Documentation: developer-docs.md
@@ -60,6 +61,7 @@ extra_css:
 extra_javascript:
   - assets/javascripts/lesson-slides.js
   - assets/javascripts/cyverse-toc.js
+  - assets/javascripts/site-links.js
 
 plugins:
   - search

@@ -349,8 +349,7 @@ body[data-md-color-scheme="slate"] .md-main {
     padding-bottom: 0.45rem;
   }
 
-  .md-sidebar--primary .md-nav__title::before {
-    content: "";
+  .md-sidebar--primary .md-nav__button.md-logo {
     display: block;
     width: 13.25rem;
     max-width: 100%;
@@ -362,6 +361,10 @@ body[data-md-color-scheme="slate"] .md-main {
       url("../assets/llm_logo.png")
       center / 100% auto
       no-repeat;
+  }
+
+  .md-sidebar--primary .md-nav__button.md-logo img {
+    display: none;
   }
 
   .md-sidebar--primary .md-nav__link {
