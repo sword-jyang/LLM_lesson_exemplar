@@ -26,6 +26,7 @@ The website is built with MkDocs Material. The main documentation pages are:
 - `docs/index.md`: public-facing homepage.
 - `docs/slides.md`: native website lesson slideshow.
 - `docs/start-here.md`: short quickstart for users with an existing LLM environment.
+- `docs/available-models.md`: guidance on model options, endpoint setup, and reproducibility notes.
 - `docs/cyverse.md`: full CyVerse tutorial for ESIIL network users.
 - `docs/modify.md`: practical guide for adapting the lesson.
 - `docs/developer-docs.md`: maintainer and developer reference.

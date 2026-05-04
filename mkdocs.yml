@@ -13,8 +13,11 @@ nav:
   - Home: index.md
   - Lesson Slides: slides.md
   - Start Here: start-here.md
+  - Available Models: available-models.md
   - Run on CyVerse: cyverse.md
   - Modify the Lesson: modify.md
+  - AI Infrastructure:
+      - LLM Hosting and Data Centers: ai-infrastructure/llm-hosting-data-centers.md
   - Developer Documentation: developer-docs.md
   - API Reference: examples.md
 
@@ -38,8 +41,10 @@ theme:
         name: Switch to light mode
   features:
     - navigation.sections
+    - navigation.expand
     - navigation.top
-    - toc.integrate
+  toc:
+    integrate: false
 
 markdown_extensions:
   - admonition

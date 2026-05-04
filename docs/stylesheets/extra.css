@@ -225,79 +225,24 @@ body[data-md-color-scheme="slate"] .md-main {
   color: var(--esiil-accent-blue);
 }
 
-/* ── OASIS-style framed sidebars ───────────────────────────────────────── */
-@media screen and (min-width: 76.25em) {
-  .md-main__inner {
-    gap: 1.6rem;
-  }
-
-  .md-sidebar {
-    padding-top: 1.7rem;
-  }
-
-  .md-sidebar__scrollwrap {
-    border: 1px solid var(--oasis-panel-border);
-    border-radius: 0.5rem;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 250, 249, 0.86)),
-      var(--oasis-line-texture);
-    box-shadow: var(--oasis-panel-shadow);
-    backdrop-filter: blur(8px);
-    scrollbar-width: thin;
-  }
-
-  .md-sidebar--primary .md-sidebar__scrollwrap {
-    padding: 0.85rem 0.75rem;
-  }
-
-  .md-sidebar--primary .md-logo img {
-    border-radius: 0.25rem;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 0.25rem 0.8rem rgba(22, 26, 25, 0.08);
-  }
-
-  .md-sidebar--secondary .md-sidebar__scrollwrap {
-    padding: 0.9rem 0.8rem;
-  }
-
-  [data-md-color-scheme="slate"] .md-sidebar__scrollwrap {
-    background:
-      linear-gradient(180deg, rgba(18, 38, 41, 0.96), rgba(23, 54, 57, 0.88)),
-      var(--oasis-line-texture);
-  }
-}
-
+/* --------------------------------------------------------------------------
+   Left sidebar layout refinements
+   Larger ESIIL-style sidebar logo, wider left rail, and improved nav type.
+   Desktop only so the mobile drawer remains controlled by MkDocs Material.
+   -------------------------------------------------------------------------- */
 .md-sidebar .md-nav__title {
   color: var(--esiil-primary-blue);
   font-weight: 800;
 }
 
-.md-sidebar--primary .md-nav__title::before {
-  content: "";
-  display: block;
-  width: 8.6rem;
-  height: 8.6rem;
-  margin: 0 auto 0.8rem;
-  border-radius: 0.35rem;
-  background:
-    #ffffff
-    url("../assets/llm_logo.png")
-    center / contain
-    no-repeat;
-  box-shadow: 0 0.35rem 1rem rgba(22, 26, 25, 0.10);
-}
-
 .md-sidebar .md-nav__item--section > .md-nav__link,
 .md-sidebar .md-nav__item--nested > .md-nav__link {
   color: var(--esiil-accent-green);
-  font-size: 0.9rem;
   font-weight: 800;
 }
 
 .md-sidebar .md-nav__link {
   border-radius: 0.35rem;
-  line-height: 1.25;
-  padding: 0.18rem 0.35rem;
 }
 
 .md-sidebar .md-nav__link--active {
@@ -309,6 +254,79 @@ body[data-md-color-scheme="slate"] .md-main {
 .md-sidebar .md-nav__link:hover {
   color: var(--esiil-accent-green);
   background: rgba(66, 188, 220, 0.10);
+}
+
+/* Hide in-page table of contents entries from the sidebar. */
+.md-sidebar--secondary {
+  display: none !important;
+}
+
+.md-sidebar--primary .md-nav[aria-label="Table of contents"] {
+  display: none;
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-main__inner {
+    gap: 1.2rem;
+  }
+
+  .md-sidebar {
+    padding-top: 1.5rem;
+  }
+
+  .md-sidebar--primary {
+    left: 0.6rem;
+    transform: translateX(calc(-1 * max(0px, (100vw - 61rem) / 2 - 0.6rem)));
+    width: 15rem;
+  }
+
+  .md-sidebar--primary .md-sidebar__scrollwrap {
+    border-right: 1px solid rgba(22, 26, 25, 0.10);
+    padding: 0.95rem 0.65rem 0.95rem 0.85rem;
+    scrollbar-width: thin;
+  }
+
+  .md-sidebar--primary .md-nav__title {
+    font-size: 1rem;
+    line-height: 1.25;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .md-sidebar--primary .md-nav__title::before {
+    content: "";
+    display: block;
+    width: 8.5rem;
+    max-width: 100%;
+    height: 8.5rem;
+    margin: 0 auto 1rem;
+    border-radius: 0.35rem;
+    background:
+      #ffffff
+      url("../assets/llm_logo.png")
+      center / contain
+      no-repeat;
+  }
+
+  .md-sidebar--primary .md-nav__link {
+    font-size: 0.95rem;
+    line-height: 1.35;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .md-sidebar--primary .md-nav__item--section > .md-nav__link,
+  .md-sidebar--primary .md-nav__item--nested > .md-nav__link {
+    font-size: 0.95rem;
+  }
+
+  .md-content {
+    margin-left: 0.5rem;
+  }
+
+  [data-md-color-scheme="slate"] .md-sidebar--primary .md-sidebar__scrollwrap {
+    border-right-color: rgba(227, 227, 227, 0.18);
+  }
 }
 
 [data-md-color-scheme="slate"] .md-sidebar .md-nav__title,
