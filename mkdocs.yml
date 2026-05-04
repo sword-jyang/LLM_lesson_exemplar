@@ -16,6 +16,7 @@ nav:
   - LLM Guide:
       - Lesson Slides: slides.md
       - Available Models: available-models.md
+      - Agents and Systems: agents-and-systems.md
       - LLM Hosting and Data Centers: ai-infrastructure/llm-hosting-data-centers.md
       - Developer Documentation: developer-docs.md
 

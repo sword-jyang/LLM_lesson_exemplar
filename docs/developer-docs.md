@@ -27,6 +27,7 @@ The website is built with MkDocs Material. The main documentation pages are:
 - `docs/start-here.md`: quick start page for users with an existing LLM environment.
 - `docs/slides.md`: native website lesson slideshow.
 - `docs/available-models.md`: guidance on model options, endpoint setup, and reproducibility notes.
+- `docs/agents-and-systems.md`: training guide chapter on agentic AI systems, memory, tools, evaluation, and provenance.
 - `docs/ai-infrastructure/llm-hosting-data-centers.md`: explanation of LLM hosting, data centers, and sovereignty.
 - `docs/cyverse.md`: full CyVerse tutorial for ESIIL network users.
 - `docs/developer-docs.md`: maintainer and developer reference.
