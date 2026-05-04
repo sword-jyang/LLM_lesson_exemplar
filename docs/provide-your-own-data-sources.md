@@ -1,6 +1,6 @@
 ![Provide Your Own Data Sources banner with database and data-flow icons.](assets/images/heroes/provide-data-sources-hero.png){ .page-hero }
 
-# Provide Your Own Data Sources
+# Bring Your Own Data
 
 This tutorial shows one specific workflow for getting a direct download URL from a web data source and giving that URL to the LLM workflow. The example here uses PAD-US data for Alabama from USGS ScienceBase.
 

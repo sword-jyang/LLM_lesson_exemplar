@@ -162,8 +162,9 @@ body[data-md-color-scheme="slate"] .md-main {
 }
 
 .md-typeset > p:has(> img.page-hero) {
+  width: calc(100% + 2.4rem);
   max-width: none !important;
-  margin: 0 0 1.4rem;
+  margin: 0 -1.2rem 1.4rem;
 }
 
 .md-typeset img.page-hero {
@@ -177,8 +178,9 @@ body[data-md-color-scheme="slate"] .md-main {
 }
 
 .md-typeset img.cyverse-hero {
-  max-height: 18rem;
-  object-fit: contain;
+  height: clamp(18rem, 32vw, 32rem);
+  max-height: none;
+  object-fit: cover;
 }
 
 /* ── Site footer ────────────────────────────────────────────────────────── */

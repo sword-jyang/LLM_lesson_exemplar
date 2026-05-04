@@ -19,7 +19,7 @@ nav:
       - Agents and Systems: agents-and-systems.md
       - LLM Hosting and Data Centers: ai-infrastructure/llm-hosting-data-centers.md
       - Developer Documentation: developer-docs.md
-  - Provide Your Own Data Sources: provide-your-own-data-sources.md
+  - Bring Your Own Data: provide-your-own-data-sources.md
 
 theme:
   name: material

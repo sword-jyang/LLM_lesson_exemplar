@@ -478,22 +478,3 @@ After you can run the reference workflow, continue to the workflow pages and mod
 For model choices and endpoint context, continue to [Available Models](available-models.md). For agentic workflow design, continue to [Agents and Systems](agents-and-systems.md).
 
 Please report what works and what goes wrong. Use the workshop feedback tab, fill out the feedback table if one is provided, or contact the training team on Slack.
-
-If you are teaching or maintaining this page, update the screenshots when the CyVerse interface changes. Keep screenshots narrow, readable, and free of private information.
-
-## Screenshot notes
-
-The images in `docs/assets/images/cyverse/` come from the current workshop instructions. Update them when the training interface changes:
-
-- `cyverse-01-login.png`
-- `cyverse-02-dashboard.png`
-- `cyverse-03-app-search.png`
-- `cyverse-04-launch-settings.png`
-- `cyverse-05-analysis-status.png`
-- `cyverse-06-open-jupyterlab.png`
-- `cyverse-07-terminal.png`
-- `cyverse-08-github-clone.png`
-- `cyverse-09-env-file.png`
-- `cyverse-10-run-workflow.png`
-- `cyverse-11-output-files.png`
-- `cyverse-12-download-results.png`
