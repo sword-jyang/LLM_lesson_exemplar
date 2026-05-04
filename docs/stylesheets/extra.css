@@ -178,9 +178,9 @@ body[data-md-color-scheme="slate"] .md-main {
 }
 
 .md-typeset img.cyverse-hero {
-  height: clamp(18rem, 32vw, 32rem);
+  height: auto;
   max-height: none;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 /* ── Site footer ────────────────────────────────────────────────────────── */
