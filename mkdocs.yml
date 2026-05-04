@@ -11,15 +11,12 @@ hooks:
 
 nav:
   - Home: index.md
-  - Lesson Slides: slides.md
-  - Start Here: start-here.md
-  - Available Models: available-models.md
-  - Run on CyVerse: cyverse.md
-  - Modify the Lesson: modify.md
-  - AI Infrastructure:
+  - Quick Start: start-here.md
+  - LLM Guide:
+      - Lesson Slides: slides.md
+      - Available Models: available-models.md
       - LLM Hosting and Data Centers: ai-infrastructure/llm-hosting-data-centers.md
-  - Developer Documentation: developer-docs.md
-  - API Reference: examples.md
+      - Developer Documentation: developer-docs.md
 
 theme:
   name: material
