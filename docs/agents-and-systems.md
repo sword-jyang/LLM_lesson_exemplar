@@ -1,6 +1,6 @@
-# From Prompts to Systems
-
 ![Agents and Systems banner with circuit lines and gear icon.](assets/images/heroes/agents-systems-hero.png){ .page-hero }
+
+# From Prompts to Systems
 
 Scientific work has always depended on tools that extend human reasoning. From early statistical models to modern numerical simulations, each generation of tools has enabled researchers to ask more complex questions, operate across larger spatial and temporal scales, and integrate increasingly diverse forms of data. Large language models represent a new class of such tools. Unlike prior tools, however, they do not simply compute. They participate in reasoning itself. This makes them both powerful and difficult to use well.
 

@@ -1,6 +1,6 @@
-# Start Here
-
 ![Quick Start banner with a speed gauge and checklist.](assets/images/heroes/quick-start-hero.png){ .page-hero }
+
+# Start Here
 
 This page is the fast path. It is for users who already have a working Python environment and access to an LLM API. If you need a fully guided cloud setup, use the [Run on CyVerse](cyverse.md) tutorial instead.
 

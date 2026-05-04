@@ -13,4 +13,13 @@
     sidebarLogo.title = "Geospatial Harmonization with LLMs home";
     sidebarLogo.setAttribute("aria-label", "Geospatial Harmonization with LLMs home");
   }
+
+  document.querySelectorAll(".md-content__inner").forEach(function (content) {
+    var title = content.querySelector(":scope > h1");
+    var hero = content.querySelector(":scope > p > img.page-hero");
+
+    if (title && hero) {
+      content.insertBefore(hero.parentElement, title);
+    }
+  });
 })();

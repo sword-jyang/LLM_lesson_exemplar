@@ -1,6 +1,6 @@
-# Geospatial Harmonization with LLMs
-
 ![Watercolor mountain banner for the Geospatial Harmonization with LLMs home page.](assets/images/heroes/home-hero.png){ .page-hero }
+
+# Geospatial Harmonization with LLMs
 
 !!! info "Authorship"
     **Designed and led by Cassie Buhler (ESIIL Postdoctoral Fellow)**

@@ -1,6 +1,6 @@
-# AI Summit Lesson
-
 ![Lesson Slides banner with a presentation window and chart icon.](assets/images/heroes/lesson-slides-hero.png){ .page-hero }
+
+# AI Summit Lesson
 
 <button id="presenter-mode-toggle" class="md-button md-button--primary" type="button">
   Enter presenter mode

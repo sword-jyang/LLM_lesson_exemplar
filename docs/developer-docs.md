@@ -1,6 +1,6 @@
-# Developer Documentation
-
 ![Developer Documentation banner with code editor and brackets icon.](assets/images/heroes/developer-docs-hero.png){ .page-hero }
+
+# Developer Documentation
 
 This page is for maintainers and contributors who need to understand how the lesson site and repository are organized. It is not the fastest way to run the lesson. For the short path, use [Quick Start](start-here.md). For the guided cloud tutorial, use [Run on CyVerse](cyverse.md).
 

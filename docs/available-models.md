@@ -1,6 +1,6 @@
-# Available Models
-
 ![Available Models banner with connected model nodes and cube icon.](assets/images/heroes/available-models-hero.png){ .page-hero }
+
+# Available Models
 
 This page is a field guide to the AI models available through your API key. It is written for people who may not already know these model families, but who need to make informed choices about scientific work, reproducibility, cost, transparency, and capability.
 

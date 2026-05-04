@@ -1,6 +1,6 @@
-# Run on CyVerse
-
 ![ESIIL, CyVerse, AI Infrastructure, and AI Verde hero banner.](assets/images/cyverse/cyverse-hero-banner.png){ .page-hero .cyverse-hero }
+
+# Run on CyVerse
 
 This tutorial is for ESIIL network learners who want to run the lesson in a CyVerse cloud environment rather than on their own laptop. CyVerse gives you a browser-based workspace with compute, storage, and a terminal already available, which is helpful when you do not want to install everything locally or when you want the whole group to work in the same environment.
 

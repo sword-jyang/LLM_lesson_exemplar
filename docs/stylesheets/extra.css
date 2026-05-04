@@ -156,16 +156,21 @@ body[data-md-color-scheme="slate"] .md-main {
 }
 
 /* Lead paragraph on home page */
-.md-content > .md-typeset > p:first-of-type {
+.md-content > .md-typeset > p:first-of-type:not(:has(img.page-hero)) {
   font-size: 1.05rem;
   max-width: 68ch;
+}
+
+.md-typeset > p:has(> img.page-hero) {
+  max-width: none !important;
+  margin: 0 0 1.4rem;
 }
 
 .md-typeset img.page-hero {
   display: block;
   width: 100%;
   max-height: 8rem;
-  margin: 0.4rem 0 1.4rem;
+  margin: 0;
   border-radius: 0.3rem;
   object-fit: cover;
   object-position: center;
@@ -174,6 +179,88 @@ body[data-md-color-scheme="slate"] .md-main {
 .md-typeset img.cyverse-hero {
   max-height: 18rem;
   object-fit: contain;
+}
+
+/* ── Site footer ────────────────────────────────────────────────────────── */
+.site-footer {
+  margin-top: 4rem;
+  padding: 2rem 1rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(247, 250, 249, 0.94)),
+    var(--oasis-line-texture);
+  border-top: 1px solid rgba(22, 26, 25, 0.10);
+}
+
+.footer-content {
+  max-width: 70rem;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.footer-text {
+  color: rgba(22, 26, 25, 0.76);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.footer-text strong {
+  color: var(--esiil-primary-blue);
+}
+
+.footer-text a {
+  color: var(--esiil-primary-blue);
+  font-weight: 700;
+}
+
+.footer-logos {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.footer-logos img {
+  display: block;
+  max-width: 7.5rem;
+  max-height: 2.4rem;
+  object-fit: contain;
+  opacity: 0.86;
+}
+
+[data-md-color-scheme="slate"] .site-footer {
+  background:
+    linear-gradient(180deg, rgba(18, 38, 41, 0.94), rgba(11, 23, 24, 0.98)),
+    var(--oasis-line-texture);
+  border-top-color: rgba(227, 227, 227, 0.18);
+}
+
+[data-md-color-scheme="slate"] .footer-text,
+[data-md-color-scheme="slate"] .footer-text strong,
+[data-md-color-scheme="slate"] .footer-text a {
+  color: rgba(245, 250, 249, 0.86);
+}
+
+@media screen and (max-width: 44rem) {
+  .site-footer {
+    padding: 1.5rem 0.8rem;
+  }
+
+  .footer-content {
+    align-items: flex-start;
+  }
+
+  .footer-logos {
+    gap: 0.75rem;
+  }
+
+  .footer-logos img {
+    max-width: 6.5rem;
+    max-height: 2.1rem;
+  }
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -290,28 +377,6 @@ body[data-md-color-scheme="slate"] .md-main {
    Restores a calm page table of contents for the long CyVerse workshop page.
    -------------------------------------------------------------------------- */
 @media screen and (min-width: 76.25em) {
-  body.oasis-cyverse-page .md-main__inner {
-    column-gap: 0;
-    margin-left: 0;
-    margin-right: 0;
-    max-width: none;
-    width: 100%;
-  }
-
-  body.oasis-cyverse-page .md-sidebar--primary {
-    left: 0;
-    transform: none;
-  }
-
-  body.oasis-cyverse-page .md-content {
-    margin-left: 0;
-  }
-
-  body.oasis-cyverse-page .md-content__inner {
-    margin-left: 1.2rem;
-    margin-right: 1.2rem;
-  }
-
   body.oasis-cyverse-page .md-sidebar--secondary {
     display: block !important;
     margin-left: auto;
@@ -361,7 +426,11 @@ body[data-md-color-scheme="slate"] .md-main {
 
 @media screen and (min-width: 76.25em) {
   .md-main__inner {
-    gap: 1.2rem;
+    column-gap: 0;
+    margin-left: 0;
+    margin-right: 0;
+    max-width: none;
+    width: 100%;
   }
 
   .md-sidebar {
@@ -369,8 +438,8 @@ body[data-md-color-scheme="slate"] .md-main {
   }
 
   .md-sidebar--primary {
-    left: 0.6rem;
-    transform: translateX(calc(-1 * max(0px, (100vw - 61rem) / 2 - 0.6rem)));
+    left: 0;
+    transform: none;
     width: 15rem;
   }
 
@@ -418,7 +487,12 @@ body[data-md-color-scheme="slate"] .md-main {
   }
 
   .md-content {
-    margin-left: 0.5rem;
+    margin-left: 0;
+  }
+
+  .md-content__inner {
+    margin-left: 1.2rem;
+    margin-right: 1.2rem;
   }
 
   [data-md-color-scheme="slate"] .md-sidebar--primary .md-sidebar__scrollwrap {

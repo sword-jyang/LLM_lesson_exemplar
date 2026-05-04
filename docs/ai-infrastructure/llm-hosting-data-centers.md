@@ -1,6 +1,6 @@
-# Where LLMs Live: Data Centers, Hosting, and Sovereignty
-
 ![LLM Hosting and Data Centers banner with server racks and cloud icon.](../assets/images/heroes/llm-hosting-data-centers-hero.png){ .page-hero }
+
+# Where LLMs Live: Data Centers, Hosting, and Sovereignty
 
 Large language models are often described as if they live in an abstract place called "the cloud." But the cloud is not a place. It is a collection of buildings, power contracts, cooling systems, network cables, storage arrays, GPUs, software stacks, and governance decisions. Every model that answers a prompt is running somewhere specific. It may be running on a laptop, on a lab server, in a university data center, on an NSF-funded research cloud, inside a national laboratory, or in a hyperscale commercial data center owned by a major technology company.
 

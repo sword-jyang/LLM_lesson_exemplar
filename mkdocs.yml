@@ -16,10 +16,10 @@ nav:
   - LLM Guide:
       - Lesson Slides: slides.md
       - Available Models: available-models.md
-      - Provide Your Own Data Sources: provide-your-own-data-sources.md
       - Agents and Systems: agents-and-systems.md
       - LLM Hosting and Data Centers: ai-infrastructure/llm-hosting-data-centers.md
       - Developer Documentation: developer-docs.md
+  - Provide Your Own Data Sources: provide-your-own-data-sources.md
 
 theme:
   name: material
