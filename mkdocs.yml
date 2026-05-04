@@ -12,6 +12,7 @@ hooks:
 nav:
   - Home: index.md
   - Quick Start: start-here.md
+  - Run on CyVerse: cyverse.md
   - LLM Guide:
       - Lesson Slides: slides.md
       - Available Models: available-models.md

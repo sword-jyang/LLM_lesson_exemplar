@@ -241,6 +241,11 @@ body[data-md-color-scheme="slate"] .md-main {
   font-weight: 800;
 }
 
+.md-sidebar--primary .md-nav[aria-label="Navigation"] > .md-nav__list > .md-nav__item > .md-nav__link {
+  color: var(--esiil-accent-green);
+  font-weight: 800;
+}
+
 .md-sidebar .md-nav__link {
   border-radius: 0.35rem;
 }
