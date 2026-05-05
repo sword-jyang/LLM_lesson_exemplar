@@ -1,4 +1,17 @@
-# Agentic Repositories for Environmental Data Science
+![Watercolor mountain banner for the Geospatial Harmonization with LLMs home page.](assets/images/heroes/home-hero.png){ .page-hero }
+
+# Geospatial Harmonization with LLMs
+
+!!! info "Authorship"
+    **Designed and led by Cassie Buhler (ESIIL Postdoctoral Fellow)**
+
+    Developed in collaboration with:
+
+    - Ty Tuff (ESIIL)
+    - Aashish Mukund (ESIIL)
+    - Tyson Swetnam (CyVerse)
+
+## Agentic Repositories for Environmental Data Science
 
 Environmental data science has never been limited by ideas. It has been limited by translation. We move from questions to code, from code to workflows, from workflows to results, and at each step something is lost: time, clarity, reproducibility, or access.
 
@@ -27,11 +40,18 @@ This lesson will guide you through building and working within that structure. Y
 
 This is the standard we are aiming for. Not informal experimentation, but structured acceleration. Not less rigor, but a different way of achieving it.
 
+<div class="oasis-link-grid" markdown>
+[Start Here](start-here.md){ .md-button .md-button--primary }
+[Run on CyVerse](cyverse.md){ .md-button }
+[Bring Your Own Data](provide-your-own-data-sources.md){ .md-button }
+[Developer Documentation](developer-docs.md){ .md-button }
+</div>
+
 ## Start Here
 
-If you already have access to a model and a compute environment, begin with the Quick Start.
+If you already have access to a model and a compute environment, begin with [Quick Start](start-here.md).
 
-If you want a full walkthrough using ESIIL infrastructure, follow the guided tutorial.
+If you want a full walkthrough using ESIIL infrastructure, follow [Run on CyVerse](cyverse.md).
 
 If you are here as part of a summit team, your goal is to move from an initial question to a working, shareable repository within the time available.
 
