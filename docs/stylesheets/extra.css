@@ -183,6 +183,58 @@ body[data-md-color-scheme="slate"] .md-main {
   object-fit: contain;
 }
 
+/* ── GitHub connection path panels ──────────────────────────────────────── */
+.github-path-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.github-path-panel {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.9rem;
+  padding: 1.1rem 1.2rem;
+  background: var(--md-default-bg-color);
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.06);
+}
+
+.github-path-panel h3 {
+  margin-top: 0;
+}
+
+.github-path-panel ol {
+  padding-left: 1.25rem;
+}
+
+.github-path-panel li {
+  margin-bottom: 0.45rem;
+}
+
+.github-path-panel pre {
+  margin: 0.65rem 0 0.9rem;
+}
+
+.github-path-panel img {
+  display: block;
+  width: 100%;
+  border-radius: 0.3rem;
+}
+
+.github-path-widget {
+  border-top: 0.35rem solid var(--md-primary-fg-color);
+}
+
+.github-path-terminal {
+  border-top: 0.35rem solid var(--md-accent-fg-color);
+}
+
+@media (max-width: 760px) {
+  .github-path-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Site footer ────────────────────────────────────────────────────────── */
 .site-footer {
   margin-top: 4rem;
