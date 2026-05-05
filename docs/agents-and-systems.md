@@ -1,210 +1,130 @@
-![Agents and Systems banner with circuit lines and gear icon.](assets/images/heroes/agents-systems-hero.png){ .page-hero }
+# Agents and Systems
 
-# From Prompts to Systems: Designing Agentic AI for Scientific Workflows
+The use of computation in environmental science has evolved through several distinct stages. Early workflows were often built around standalone scripts, written to process a specific dataset or answer a narrowly defined question. As data grew in volume and complexity, these scripts gave way to more structured pipelines, notebooks, and workflow managers that allowed researchers to organize, document, and reproduce their analyses.
 
-## Overview
+Large language models introduce a new stage in this evolution. They do not replace existing computational methods, but they change how those methods are constructed. Instead of writing code line by line, researchers can now describe analytical intent in natural language and receive executable code in response.
 
-Scientific work has always depended on tools that extend human reasoning. From early statistical models to modern numerical simulations, each generation of tools has enabled researchers to ask more complex questions, operate across larger spatial and temporal scales, and integrate increasingly diverse forms of data. Large language models (LLMs) represent a new class of such tools. Unlike prior tools, however, they do not simply compute. They participate in reasoning itself. This makes them both powerful and difficult to use well.
+This shift raises an important question: does this represent a new form of scientific computing, or does it undermine the rigor that computational workflows are meant to provide?
 
-When used only through prompting, LLMs appear as flexible but inconsistent assistants. When embedded within structured workflows, they function as components of computational systems that persist, evolve, and can be inspected over time.
+Answering that question requires a more precise understanding of agents and systems.
 
-This chapter is about that transition.
+---
 
-The central claim is that the real value of AI in scientific contexts does not come from isolated interactions, but from systems. A single prompt can produce an answer. A system can produce a result, a record of how that result was obtained, and a mechanism for refining that result through iteration.
+## Historical Context: From Scripts to Systems
 
-To ground the discussion, we will follow a single running example: a literature synthesis system that continuously ingests new papers, updates a structured synthesis, evaluates its own outputs, logs every decision, and publishes an evolving report. Each section shows how one part of that system is designed.
+To understand the role of agents, it is useful to situate them within the broader history of computational practice.
 
-```mermaid
-flowchart LR
-  A[Prompt] --> B[Structured Prompt]
-  B --> C[Prompt Chain]
-  C --> D[Workflow]
-  D --> E[Agentic Loop]
-  E --> F[Persistent System]
-```
+| Stage of Practice | Primary Unit of Work | Strengths | Limitations |
+|---|---|---|---|
+| Standalone scripts | Individual files | Flexible, direct control | Difficult to scale or reproduce |
+| Notebooks | Interactive documents | Combines narrative, code, and results | Often linear, hard to modularize |
+| Pipelines and workflows | Structured processes | Reproducibility and automation | Require significant setup and expertise |
+| Agentic systems | Repository-centered systems | Rapid development with structured integration | Require new conventions and constraints |
 
-*Figure 1. The progression from prompts to systems. The literature synthesis example follows this same path, becoming more structured and persistent at each stage.*
+Each stage addresses limitations of the previous one. Agentic systems build on workflows and pipelines, but introduce a new interface for constructing them.
 
-By the end of this chapter, the reader should be able to design and implement a basic agentic system for their own scientific workflow.
+---
 
-## 1. From Prompts to Systems
+## What Is a System?
 
-A prompt is the fundamental unit of interaction with a language model. In the literature synthesis example, an initial prompt might ask the model to summarize a handful of papers. This works for exploration, but it does not scale.
+In scientific computing, a system is more than a collection of code. It is an organized set of components that work together to produce results.
 
-To improve consistency, the prompt is structured. It specifies sections such as methods, results, and gaps. This produces outputs that can be compared and reused.
+A system typically includes data sources, code, computational environments, documentation, and rules for how each part interacts. The defining feature of a system is not its complexity, but its structure. A system specifies how work is done, not just what is done.
 
-As more papers are introduced, the task is decomposed. One prompt extracts key points from each paper, another organizes them, and another produces a synthesis. These prompts form a chain.
+In environmental data science, systems are essential because analyses often depend on integrating heterogeneous datasets, applying multiple transformations, and ensuring that results can be reproduced and interpreted correctly. A biodiversity analysis may draw from field surveys, remote sensing products, climate data, and model output. Each component may be valid on its own, but the scientific result depends on how those components are connected.
 
-```mermaid
-flowchart TD
-  P1[Extract] --> P2[Organize]
-  P2 --> P3[Synthesize]
-```
+A system is what makes those connections explicit.
 
-*Figure 2. Prompt chains decompose a task into transformations that can be inspected and improved.*
+---
 
-Persistence is introduced when intermediate results are stored. The system now has memory beyond the model context. Finally, evaluation is added, allowing the system to revise outputs. At this point, prompting has become a workflow and then an agentic process.
+## What Is an Agent?
 
-## 2. Agentic AI as Structured Iteration
+Within a system, an agent is an entity that performs tasks according to defined rules and with access to specific resources.
 
-In the synthesis system, iteration is introduced when the system evaluates its draft and revises it. This creates a loop.
+In the context of large language models, an agent is not simply the model itself. It is the model operating within constraints. It may be given access to a repository, allowed to modify or generate code, guided by explicit instructions, and asked to work within a defined workflow.
 
-```mermaid
-flowchart TD
-  S[State] --> P[Plan]
-  P --> A[Act]
-  A --> E[Evaluate]
-  E --> S
-```
+This distinction is important. A model used without constraints produces outputs that are difficult to reproduce and verify. A model embedded as an agent within a system produces outputs that are shaped by the structure of that system.
 
-*Figure 3. The agentic loop applied to literature synthesis: plan an outline, act by drafting, evaluate for coverage and citations, update state, and repeat.*
+The agent is useful because it can accelerate implementation. The system is necessary because it makes that implementation inspectable.
 
-At first, a single agent handles all steps. As complexity grows, tools and multiple agents are introduced.
+---
 
-## 3. Memory and State Management
+## The Repository as the Core System
 
-In the synthesis system, memory appears as a state file containing papers, extracted notes, outlines, drafts, and evaluation results. This state is updated at each iteration and stored externally.
+In this project, the repository serves as the central system.
 
-```mermaid
-flowchart LR
-  Papers --> State
-  State --> Draft
-  Draft --> Evaluation
-  Evaluation --> State
-```
+It is where code is written, stored, and versioned. It is where data access and harmonization are defined. It is where workflows are implemented and executed. It is where results are generated and documented. It is also where agent behavior is constrained and guided.
 
-*Figure 4. State evolves as the system processes new papers and refines its synthesis.*
+This structure transforms AI interaction into something durable. Instead of relying on transient conversations, the work is captured in a persistent, inspectable form.
 
-By externalizing memory, the system becomes reproducible and inspectable.
+The repository becomes the primary artifact of the scientific process.
 
-## 4. Specifying Behavior with agents.md
+---
 
-In the synthesis system, behavior is defined in `agents.md`. This file specifies that the planner creates an outline, the executor drafts sections, and the evaluator checks for citations and coverage.
+## The Role of agent.md
 
-Example:
+A defining feature of this approach is the inclusion of an agent.md file.
 
-```markdown
-## Task
-Maintain an up-to-date literature synthesis.
+This file specifies how the agent should behave within the repository. It may include goals and priorities for the agent, constraints on how code should be written or modified, expectations for documentation and structure, and rules for interacting with data and workflows.
 
-## Roles
-Planner: update outline
-Executor: draft sections
-Evaluator: verify citations and completeness
+In traditional programming, similar constraints are often implicit. They may exist as team norms, instructor expectations, coding conventions, or informal practices. By making them explicit, agent.md functions as a formal interface between the user and the agent.
 
-## Output
-Structured markdown with citations
-```
+It plays a role analogous to a methods section in a scientific paper, an API contract in software engineering, or a protocol in experimental design. It does not replace human judgment, but it makes the conditions for agent-assisted work clearer.
 
-*Figure 5. A minimal agents.md defining behavior for the synthesis system.*
+This explicit structure is what allows agent-assisted work to remain rigorous.
 
-This file ensures consistent behavior across runs.
+---
 
-## 5. Prompt Logs as Method and Provenance
+## Why Structure Matters: Addressing "Vibe Coding"
 
-Each step in the synthesis system is logged. For example, when the evaluator rejects a draft due to missing citations, that decision is recorded.
+The term "vibe coding" is often used to describe informal, unconstrained use of AI to generate code. In such cases, outputs may appear functional but lack transparency, consistency, and reproducibility.
 
-```json
-{"step": 3, "action": "evaluate", "result": "fail", "reason": "missing citations"}
-```
+This critique highlights a real risk. Without structure, AI-assisted workflows can become difficult to interpret or validate. Code may run without being understandable. Results may appear plausible without being traceable. Decisions may be buried in a conversation that is not part of the scientific record.
 
-*Figure 6. A log entry capturing evaluation and decision.*
+Agentic systems address this by enforcing constraints at multiple levels.
 
-Logs make the workflow reproducible and auditable.
-
-## 6. Tool Use and Integration
-
-In the synthesis system, tools retrieve papers, extract metadata, and run analyses. The model proposes actions, but tools execute them.
-
-```mermaid
-flowchart LR
-  Model --> Tools
-  Tools --> Data
-  Data --> Model
-```
-
-*Figure 7. Tool use connects reasoning to data and computation.*
-
-## 7. From Workflows to Systems
-
-The synthesis workflow becomes a system when it runs continuously, ingesting new papers and updating outputs.
-
-```mermaid
-flowchart TB
-  Scheduler --> Agent
-  Agent --> Storage
-  Storage --> Interface
-```
-
-*Figure 8. The synthesis workflow becomes a system when embedded in infrastructure.*
-
-## 8. Evaluation and Validation
-
-In the synthesis system, evaluation checks that each section is complete and properly cited.
-
-```mermaid
-flowchart TD
-  Draft --> Check
-  Check -->|Pass| Publish
-  Check -->|Fail| Revise
-```
-
-*Figure 9. Evaluation ensures quality before outputs are accepted.*
-
-## 9. Failure Modes and Risk Mitigation
-
-In the synthesis system, failures include missing citations, outdated information, or repeated revisions without improvement. These are mitigated through validation and logging.
-
-| Failure mode | What it looks like | Mitigation |
+| Concern | Unstructured Interaction | Agentic System Approach |
 |---|---|---|
-| Hallucination | Unsupported but plausible claims | Require citations, retrieval, and grounding checks |
-| Drift | Outputs change as data, prompts, or models change | Version data, prompts, schemas, and model configurations |
-| Looping | The system revises repeatedly without improving | Add iteration limits and convergence criteria |
-| Silent failure | Errors pass downstream without being noticed | Make validation mandatory and log failures as events |
-| Tool misuse | The model calls the wrong tool or uses malformed inputs | Enforce schemas and validate tool arguments before execution |
+| Reproducibility | Conversation-dependent | Version-controlled repository |
+| Transparency | Implicit reasoning and hidden assumptions | Explicit code and documented workflows |
+| Consistency | Variable outputs across prompts | Rule-guided agent behavior |
+| Validation | Ad hoc checking | Executable and testable pipelines |
+| Collaboration | Difficult to share context | Shared repository and documented conventions |
 
-*Table 1. Common failure modes in agentic systems and the design responses that make those failures visible and recoverable.*
+These constraints do not eliminate uncertainty, but they make it visible and manageable. That is the core difference between vibe coding and structured agentic work.
 
-## 10. How to Actually Build an Agentic System
+---
 
-The synthesis system is built by defining a loop over state, integrating tools, logging actions, and enforcing evaluation. Each component introduced in earlier sections becomes part of the implementation.
+## Agents in Environmental Workflows
 
-## 11. Multi-Agent Systems in Practice
+In environmental data science, agents can assist with a range of tasks. They can help access and format heterogeneous datasets, implement data harmonization procedures, generate analysis code, document assumptions, and revise workflows as questions evolve.
 
-The synthesis system can be extended with multiple agents: one retrieves papers, another analyzes them, and a third writes the synthesis.
+These tasks are not performed in isolation. They are integrated into workflows that reflect the structure of the repository.
 
-```mermaid
-flowchart TD
-  Planner --> Retriever
-  Planner --> Writer
-  Retriever --> Evaluator
-  Writer --> Evaluator
-  Evaluator --> Planner
-```
+For example, an agent might generate code to align biodiversity observations with climate data. That code is then executed, inspected, and potentially revised. The result becomes part of a reproducible pipeline rather than a one-off solution.
 
-*Figure 10. A multi-agent version of the synthesis system.*
+The scientific value does not come from the model producing a correct answer on its own. The value comes from using the model to help construct a workflow that can be tested, modified, and shared.
 
-## 12. Data Contracts and Structured Outputs
+---
 
-The synthesis system uses structured outputs to ensure consistency.
+## From Interaction to Infrastructure
 
-```json
-{"section": "methods", "citations": ["paper1", "paper2"]}
-```
+The significance of agentic systems lies in their ability to support infrastructure development.
 
-*Figure 11. Structured output ensures compatibility across system components.*
+A well-structured repository with an embedded agent can function as a reusable analytical workflow, a shared resource for collaboration, a record of methodological decisions, and a platform for extending and refining analyses.
 
-## 13. System Growth and Evolution
+This is particularly important in environmental science, where research often depends on integrating data across scales, domains, and disciplines. The work is rarely a single calculation. It is more often a chain of decisions linking data collection, harmonization, modeling, visualization, and interpretation.
 
-Over time, the synthesis system improves through better prompts, schemas, and evaluation criteria.
+Agentic repositories help make that chain visible.
 
-```mermaid
-flowchart LR
-  Run1 --> Run2 --> Run3 --> System
-```
+---
 
-*Figure 12. Repeated runs produce system evolution.*
+## Closing Perspective
 
-## Conclusion
+Agents and systems provide a way to incorporate AI into scientific practice without abandoning the principles that make that practice reliable.
 
-The transition from prompts to systems represents a shift from interaction to infrastructure. By introducing structure, memory, evaluation, and persistence, AI workflows acquire the properties required for scientific practice. The result is not simply automation, but a new form of computational method in which AI is embedded within transparent, reproducible, and evolving systems.
+The key shift is conceptual.
+
+The goal is not to obtain answers from a model. The goal is to build systems that produce answers in a transparent and reproducible way.
+
+The agent accelerates the process. The system ensures that the results remain scientific.
