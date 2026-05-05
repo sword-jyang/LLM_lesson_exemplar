@@ -18,6 +18,8 @@ Before changing code, identify which part of the lesson you want to modify:
 
 Find the prompt text used by the reference example. In this repository, the Colorado reference prompt is documented in `docs/examples/colorado_fire_risk.md` and implemented in `examples/colorado_fire_risk/colorado_harmonization.py`.
 
+For a deeper explanation of how agents operate within structured repositories, see [Agents and Systems](agents-and-systems.md).
+
 When editing a prompt, keep three things explicit:
 
 1. What role the model is playing.
@@ -29,6 +31,8 @@ A good prompt for this lesson should not simply ask the model to produce an answ
 ## Change the data sources
 
 When changing the data, document the source, spatial coverage, temporal coverage, format, and any access constraints. Environmental data workflows become difficult to debug when data assumptions are implicit.
+
+If you want more context on why these alignment decisions matter, see [What Is a Data Harmonizer?](data-harmonizer.md).
 
 For each new data source, record:
 
@@ -46,9 +50,11 @@ The existing reference example is in `examples/colorado_fire_risk/`. User-create
 
 Keep model configuration separate from the scientific logic whenever possible. API keys and endpoints should be provided through environment variables or local configuration files that are not committed to GitHub.
 
+If you want a deeper comparison of model options and tradeoffs, see [Available Models](available-models.md).
+
 Do not hard-code credentials in tracked files.
 
-If the lesson supports multiple model providers, document the required environment variables and any differences in output format or model behavior.
+If the lesson supports multiple model providers, document the required environment variables and any differences in output format or model behavior. For more context on where hosted models run and why that matters, see [LLM Hosting and Data Centers](ai-infrastructure/llm-hosting-data-centers.md).
 
 ## Change the outputs
 

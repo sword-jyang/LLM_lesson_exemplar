@@ -8,12 +8,16 @@ This page is the fast path. It is for users who already have a working Python en
 
 This lesson uses a small geospatial example to show how a large language model can help organize environmental data sources, identify harmonization steps, and produce a reproducible analysis workflow. The goal is not to hide the analysis behind AI. The goal is to make the assumptions, transformations, and outputs easier to inspect.
 
+If you want more context on why harmonization is necessary before analysis, see [What Is a Data Harmonizer?](data-harmonizer.md).
+
 ## Clone the repository
 
 ```bash
 git clone https://github.com/CU-ESIIL/LLM_lesson_exemplar.git
 cd LLM_lesson_exemplar
 ```
+
+For a deeper explanation of why this lesson centers the repository as the unit of AI-assisted scientific work, see [Agents and Systems](agents-and-systems.md).
 
 ## Create an environment
 
@@ -36,6 +40,8 @@ export OPENAI_API_KEY="your-api-key-here"
 ```
 
 Do not commit API keys, tokens, or credentials to the repository.
+
+If you want a deeper comparison of model options and tradeoffs before choosing a model, see [Available Models](available-models.md).
 
 ## Run the reference example
 
@@ -60,5 +66,7 @@ After the workflow runs, check three things:
 If you need a step-by-step cloud setup, go to [Run on CyVerse](cyverse.md).
 
 If you want to adapt this lesson to a different dataset, prompt, or model, go to [Modify the Lesson](modify.md).
+
+If you are following the workshop sequence, keep the [Lesson Slides](slides.md) open alongside these steps.
 
 If you are maintaining the package or site, go to [Developer Documentation](developer-docs.md).

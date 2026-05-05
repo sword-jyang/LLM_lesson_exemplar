@@ -6,6 +6,8 @@ This tutorial shows one specific workflow for getting a direct download URL from
 
 This page is not a general catalog-search guide. It is a click-by-click record of the workflow shown in the tutorial directions. Use it when you already know which dataset you want and you need the direct downloadable file URL that the LLM or workflow can use.
 
+If you want more context on how these downloaded sources become comparable inside the workflow, see [What Is a Data Harmonizer?](data-harmonizer.md).
+
 ## Example: Getting the download URL
 
 Let's say you want to download PAD data for Alabama from USGS.

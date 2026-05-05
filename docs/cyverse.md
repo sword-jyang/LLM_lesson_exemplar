@@ -4,6 +4,8 @@
 
 This tutorial is for ESIIL network learners who want to run the lesson in a CyVerse cloud environment rather than on their own laptop. CyVerse gives you a browser-based workspace with compute, storage, and a terminal already available, which is helpful when you do not want to install everything locally or when you want the whole group to work in the same environment.
 
+For more context on the compute environment behind this workflow, see [LLM Hosting and Data Centers](ai-infrastructure/llm-hosting-data-centers.md).
+
 By the end of this page, you will have launched a CyVerse analysis, opened a working session, connected the session to GitHub, cloned the lesson repository, added your LLM credentials safely, run the reference workflow, and checked the output files.
 
 If you already have Python, Git, and an LLM API key working on your own computer, you may prefer the shorter [Quick Start](start-here.md) page.
@@ -229,6 +231,8 @@ Supported model IDs for this training may include:
 
 Some models may be slower than others. If the model is doing poorly, ask the training team for help, record what happened, and try another model. Some models also expose a reasoning setting that can be increased in the interface.
 
+If you want a deeper comparison of model options and tradeoffs, see [Available Models](available-models.md).
+
 !!! note "If Cline asks for Sonnet"
     Cline may strongly recommend a default Anthropic model such as Sonnet. For this training, ignore that recommendation and use the CyVerse/OpenAI-compatible endpoint supplied by the instructor. If Cline asks you to confirm, click **Proceed Anyway**.
 
@@ -268,6 +272,10 @@ You can also test the app through Cline's chat. Ask it to harmonize your data. Y
 - extent,
 - resolution,
 - and URLs to download the data from.
+
+For a deeper explanation of how agents operate within structured repositories, see [Agents and Systems](agents-and-systems.md).
+
+If you want more context on why projection, extent, resolution, and dataset alignment matter, see [What Is a Data Harmonizer?](data-harmonizer.md).
 
 The LLM should produce:
 
@@ -351,6 +359,8 @@ Download these datasets, harmonize them to EPSG:4326 over Colorado, and generate
 ```
 
 Good URLs matter. Some download buttons hide the real file URL behind redirects or JavaScript. To get the actual file URL:
+
+For the click-by-click version of this data-source handoff, see [Bring Your Own Data](provide-your-own-data-sources.md).
 
 You have two good options:
 
@@ -443,7 +453,5 @@ Read the generated plan, logs, and summary before changing code. The goal of thi
 ## Next steps
 
 After you can run the reference workflow, continue to the workflow pages and modify one part at a time: the study area, the input datasets, the prompt, the model, or the output format.
-
-For model choices and endpoint context, continue to [Available Models](available-models.md). For agentic workflow design, continue to [Agents and Systems](agents-and-systems.md).
 
 Please report what works and what goes wrong. Use the workshop feedback tab, fill out the feedback table if one is provided, or contact the training team on Slack.
