@@ -1,106 +1,41 @@
-![Watercolor mountain banner for the Geospatial Harmonization with LLMs home page.](assets/images/heroes/home-hero.png){ .page-hero }
+# Agentic Repositories for Environmental Data Science
 
-# Geospatial Harmonization with LLMs
+Environmental data science has never been limited by ideas. It has been limited by translation. We move from questions to code, from code to workflows, from workflows to results, and at each step something is lost: time, clarity, reproducibility, or access.
 
-!!! info "Authorship"
-    **Designed and led by Cassie Buhler (ESIIL Postdoctoral Fellow)**
+Large language models introduce a new interface to that process. They allow us to express intent in natural language and generate working code in response. This has led to a common critique: that this style of work is “vibe coding”—informal, unstructured, and detached from the rigor that scientific computing requires.
 
-    Developed in collaboration with:
+That critique is valid for ad hoc use. It is not valid for what we are building here.
 
-    - Ty Tuff (ESIIL)
-    - Aashish Mukund (ESIIL)
-    - Tyson Swetnam (CyVerse)
+This project is centered on a different model: the agentic repository. In this approach, the repository—not the conversation—is the unit of scientific work. The repository contains code, data access patterns, workflows, and, critically, the rules that govern how an AI agent interacts with all of them.
 
-AI is not magic. It is a new interface to scientific work.
+At the core of this structure is a simple idea: if you want to use AI in science, you must constrain it in the same way you constrain any computational system. That means defining interfaces, expectations, and boundaries. In this repository, those constraints are made explicit through:
 
-Most environmental scientists are already using computation. We write scripts, move data, debug pipelines, and translate ideas into code.
+* Version-controlled code that can be inspected and modified
+* Reproducible workflows that can be executed in real environments
+* Explicit data sources and transformations
+* An agent.md file that defines how the AI is allowed to operate within the system
 
-What has changed is not the goal. It is the interface.
+The agent.md file is not decoration. It is the equivalent of an API contract or a methods section. It encodes rules, expectations, and structure so that interactions with the model are not free-form, but guided, testable, and repeatable.
 
-Large language models allow you to describe what you want in plain language and have working code, workflows, and analyses generated in response. That can sound like "vibe coding." It can feel informal, even unscientific.
+This is why this is not “vibe coding.” The model is not being trusted. It is being constrained and integrated into a system that enforces the same principles that have always defined good computational science: clarity, versioning, reproducibility, and inspection.
 
-But used correctly, it is neither.
+In that sense, working with AI is less like abandoning programming and more like learning a new language for expressing it. The underlying fundamentals have not changed. You are still defining logic, structuring workflows, managing state, and validating outputs. What has changed is the interface through which you do that work.
 
-This lesson is about turning that raw interaction into a structured, reproducible, and inspectable scientific workflow.
+Agentic repositories make that interface usable without sacrificing rigor. They allow you to move more quickly from idea to implementation while preserving a clear record of how that implementation was constructed.
 
-<div class="oasis-link-grid" markdown>
-[Start Here](start-here.md){ .md-button .md-button--primary }
-[Run on CyVerse](cyverse.md){ .md-button }
-[Bring Your Own Data](provide-your-own-data-sources.md){ .md-button }
-[Developer Documentation](developer-docs.md){ .md-button }
-</div>
+This lesson will guide you through building and working within that structure. You will define a problem, use an AI model to help generate and refine code, and integrate that code into a repository that enforces rules about how it can be used, modified, and extended. The result is not a conversation. It is a system: one that others can run, inspect, and build upon.
 
-## What You Will Learn
-
-You will go from asking a model a question to producing a complete, shareable workflow:
-
-* Data access that anyone can reproduce
-* Code that is versioned and inspectable
-* Results that can be rerun, modified, and extended
-* A public artifact that others can critique and build on
-
-The goal is not to trust the model. The goal is to use the model to accelerate everything you already know how to do well.
-
-## The Core Idea: From Conversation to Workflow
-
-Most people use AI like a search engine or a chatbot. That is the least useful way to use it.
-
-In this lesson, you will treat the model as a collaborator that helps you:
-
-1. Define a problem clearly
-2. Generate candidate solutions
-3. Test those solutions in real compute environments
-4. Capture everything in a reproducible workflow
-
-The conversation is not the product. The workflow is the product.
-
-## Why This Is Not "Vibe Coding"
-
-Skepticism is healthy. You should not trust generated code blindly.
-
-This approach is different because it builds in constraints:
-
-* All outputs are executed in real environments, including cloud or CyVerse instances
-* All code is stored in version-controlled repositories
-* All data sources are explicit and traceable
-* All results can be rerun by someone else
-
-If something is wrong, you can see where it went wrong. If something works, you can prove that it works.
-
-This is closer to reproducible science than to improvisation.
-
-## What This Enables
-
-When the interface becomes easier, the bottleneck shifts.
-
-Instead of spending most of your time writing boilerplate code, you can spend more time on:
-
-* framing better scientific questions
-* comparing alternative models and assumptions
-* integrating datasets that were previously too cumbersome to use
-* iterating quickly across hypotheses
-
-This is not about replacing expertise. It is about amplifying it.
-
-## What You Will Build
-
-By the end of this lesson, you will have:
-
-* A working analysis pipeline
-* A public repository documenting your process
-* A deployable workflow that others can run
-* A clear record of how AI contributed to the result
-
-You will not just have an answer. You will have something that can be reviewed, reused, and extended.
+This is the standard we are aiming for. Not informal experimentation, but structured acceleration. Not less rigor, but a different way of achieving it.
 
 ## Start Here
 
-If you already have access to a model and a compute environment, begin with [Quick Start](start-here.md).
+If you already have access to a model and a compute environment, begin with the Quick Start.
 
-If you want a full walkthrough using ESIIL infrastructure, follow [Run on CyVerse](cyverse.md).
+If you want a full walkthrough using ESIIL infrastructure, follow the guided tutorial.
 
-If you are here as part of a summit team, your goal is to turn your question into a working workflow by the end of the session.
+If you are here as part of a summit team, your goal is to move from an initial question to a working, shareable repository within the time available.
 
 ## Closing Line
 
-We are not teaching you how to talk to AI. We are teaching you how to turn conversation into science.
+We are not replacing scientific computing.
+We are changing how we interface with it.
