@@ -215,7 +215,22 @@ def download_file(url: str, output_dir: Path, verbose: bool = True) -> Path:
     _log(f"Downloading: {url}", verbose)
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(request) as response, open(output_path, "wb") as f:
-        shutil.copyfileobj(response, f)
+        total = int(response.headers.get("Content-Length", 0))
+        downloaded = 0
+        chunk_size = 1024 * 256  # 256 KB chunks
+        while True:
+            chunk = response.read(chunk_size)
+            if not chunk:
+                break
+            f.write(chunk)
+            downloaded += len(chunk)
+            if verbose and total > 0:
+                pct = downloaded * 100 // total
+                mb = downloaded / 1_048_576
+                total_mb = total / 1_048_576
+                print(f"\r  {mb:.1f} / {total_mb:.1f} MB ({pct}%)", end="", flush=True)
+        if verbose and total > 0:
+            print()  # newline after progress
 
     return output_path
 
@@ -1380,7 +1395,7 @@ def _create_visualization_impl(
     metadata: VizMetadata | None = None,
 ) -> Path:
     """Internal implementation of PNG visualization creation."""
-    _log("Creating visualization", verbose)
+    _log("Creating static PNG visualization...", verbose)
     _load_color_map_from_output_dir(output_path)
 
     from matplotlib.gridspec import GridSpec
@@ -2085,7 +2100,7 @@ def _create_interactive_visualization_impl(
     verbose: bool = True
 ) -> folium.Map:
     """Internal implementation of interactive visualization creation."""
-    _log("Creating interactive HTML visualization", verbose)
+    _log("Creating interactive HTML visualization (this may take several minutes for large layers)...", verbose)
     _load_color_map_from_output_dir(output_path)
 
     xmin, ymin, xmax, ymax = target_extent
@@ -2137,8 +2152,7 @@ def _create_interactive_visualization_impl(
                 xmin, ymin, xmax, ymax = target_extent
                 tol = min(xmax - xmin, ymax - ymin) * 0.001
                 _log(
-                    f"  Large vector ({size_mb:.0f} MB) — simplifying with tolerance={tol:.4f}° "
-                    f"and reducing coordinate precision before embedding...",
+                    f"  Large vector ({size_mb:.0f} MB) — simplifying geometry (this is the slowest step)...",
                     verbose,
                 )
                 gdf = gpd.GeoDataFrame(
@@ -2487,7 +2501,8 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
     with TemporaryDirectory(prefix=f"{workflow.name}_") as tmp:
         tmp_dir = Path(tmp)
 
-        for dataset in workflow.datasets:
+        for _ds_idx, dataset in enumerate(workflow.datasets, 1):
+            _log(f"\n[{_ds_idx}/{len(workflow.datasets)}] {dataset.display_name or _format_layer_name(dataset.name)}", workflow.verbose)
             dataset_dir = tmp_dir / dataset.name
             dataset_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2691,6 +2706,7 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
 
     interactive_map = None
     if workflow.create_visualization and output_files:
+        _log(f"\nGenerating visualizations ({len(output_files)} layers)...", workflow.verbose)
         # Filenames are hardcoded inside create_visualization /
         # create_interactive_visualization (see HARMONIZED_VIZ_PNG / _HTML)
         # so the website build hook can find them.
