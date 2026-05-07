@@ -20,6 +20,7 @@ pystac-client>=0.7
 xarray>=2024.0
 netCDF4>=1.6
 zarr>=2.0
+dask[array]>=2026.3.0
 
 # Testing and catalog sync
 pytest>=7.0
