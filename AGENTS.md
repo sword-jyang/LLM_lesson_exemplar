@@ -890,7 +890,7 @@ For datasets in NetCDF format (MACAv2, CMIP6, ERA5 subsets, etc.):
 
 **MACAv2 CMIP5 OPeNDAP URL pattern:**
 ```
-http://thredds.northwestknowledge.net:8080/thredds/dodsC/
+https://thredds.northwestknowledge.net/thredds/dodsC/
   agg_macav2metdata_{variable}_{model}_{ensemble}_{scenario}_{start}_{end}_CONUS_monthly.nc
 ```
 
@@ -901,7 +901,7 @@ Scenarios: `historical` (1950–2005), `rcp45` (2006–2099), `rcp85` (2006–20
 **Note — ensemble member varies by model.** Do not assume `r1i1p1`. Verify by
 browsing the THREDDS catalog XML at:
 ```
-http://thredds.northwestknowledge.net:8080/thredds/catalog/MACAV2/catalog.xml
+https://thredds.northwestknowledge.net/thredds/catalog/MACAV2/catalog.xml
 ```
 Example: CCSM4 uses `r6i1p1`, not `r1i1p1`.
 

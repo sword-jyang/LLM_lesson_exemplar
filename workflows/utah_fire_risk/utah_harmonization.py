@@ -48,7 +48,7 @@ TARGET_RESOLUTION = 270
 OUTPUT_DIR = Path(__file__).parent / "output"
 
 # MACAv2 CMIP5 OPeNDAP base URL (Northwest Knowledge Network THREDDS server)
-_THREDDS = "http://thredds.northwestknowledge.net:8080/thredds/dodsC"
+_THREDDS = "https://thredds.northwestknowledge.net/thredds/dodsC"
 
 # Example datasets
 # Using Landfire FBFM40 (Scott and Burgan Fire Behavior Fuel Models) - CONUS 2024

@@ -15,7 +15,7 @@ Colorado using `src/geospatial_harmonizer.py`.
 >   Use this CSV for both visualization colors (R, G, B columns) and legend labels:
 >   `https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv`
 > - MACAv2 winter precipitation via OPeNDAP (raster, continuous, variable `precipitation`, months Dec–Mar):
->   `http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc`
+>   `https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc`
 > - MTBS burned area boundaries (vector, do not rasterize):
 >   `https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip`
 > - Microsoft building footprints (vector, rasterize to presence/absence):
@@ -28,7 +28,7 @@ Colorado using `src/geospatial_harmonizer.py`.
 | Layer | Type | URL |
 |---|---|---|
 | FBFM40 Fire Behavior Fuel Models | Raster (categorical) | `https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip` |
-| MACAv2 Winter Precipitation | Raster (continuous, OPeNDAP) | `http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc` |
+| MACAv2 Winter Precipitation | Raster (continuous, OPeNDAP) | `https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc` |
 | MTBS Burned Area Boundaries | Vector | `https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip` |
 | Microsoft Building Footprints | Vector → rasterized | `https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Colorado.geojson.zip` |
 

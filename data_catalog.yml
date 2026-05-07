@@ -87,7 +87,7 @@ datasets:
   - name: MACAv2 Winter Precipitation CCSM4 RCP8.5 2006-2099
     type: raster
     source: Northwest Knowledge Network THREDDS
-    url: http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
+    url: https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
     topics: [climate, precipitation, projections, cmip5]
     notes: >
       OPeNDAP endpoint — use netcdf_variable="precipitation" and netcdf_months=[12,1,2,3]

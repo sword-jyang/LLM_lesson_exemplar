@@ -12,7 +12,7 @@ User asked: "Download these datasets, harmonize them to EPSG:4326 over Colorado,
   Use this CSV for both visualization colors (R, G, B columns) and legend labels:
   `https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv`
 - MACAv2 winter precipitation via OPeNDAP (raster, continuous, variable `precipitation`, months Dec–Mar):
-  `http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc`
+  `https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc`
 - MTBS burned area boundaries (vector, do not rasterize):
   `https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip`
 - Microsoft building footprints (vector, rasterize to presence/absence):

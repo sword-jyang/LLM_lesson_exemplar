@@ -76,7 +76,7 @@ For this lesson, the most important tool is the terminal. In VS Code, open a ter
 After VS Code opens, use **File -> Open Folder** and navigate to:
 
 ```text
-/home/joyvan/work/
+/home/jovyan/work/
 ```
 
 This is the working folder used in the current training image.
@@ -134,7 +134,7 @@ There are two good ways to connect this environment to GitHub. The widget path i
     <ol>
       <li>Move to a working directory where you want the lesson files to live. For the current CyVerse training image, the working folder may be:</li>
     </ol>
-    <pre><code class="language-bash">cd /home/joyvan/work/</code></pre>
+    <pre><code class="language-bash">cd /home/jovyan/work/</code></pre>
     <p>If that folder does not exist, use your home directory:</p>
     <pre><code class="language-bash">cd ~</code></pre>
     <p>Clone the lesson repository:</p>
@@ -143,7 +143,7 @@ cd LLM_lesson_exemplar</code></pre>
     <p>Confirm that you are inside the repository:</p>
     <pre><code class="language-bash">ls</code></pre>
     <p>You should see files such as <code>README.md</code>, <code>docs/</code>, <code>mkdocs.yml</code>, <code>examples/</code>, or lesson-related folders.</p>
-    <p>If you used the VS Code file browser to open <code>/home/joyvan/work/</code>, navigate into the <code>LLM_lesson_exemplar</code> folder after cloning. This is the folder you will use for Cline and terminal commands.</p>
+    <p>If you used the VS Code file browser to open <code>/home/jovyan/work/</code>, navigate into the <code>LLM_lesson_exemplar</code> folder after cloning. This is the folder you will use for Cline and terminal commands.</p>
     <p><img src="assets/images/cyverse/cyverse-08-github-clone.png" alt="Screenshot showing the terminal command to clone the lesson repository from GitHub."></p>
     <p><em>Cloning the lesson repository from GitHub.</em></p>
     <p>If you plan to edit the lesson and push changes back to GitHub, fork the repository first and clone your fork instead. For simply running the lesson, cloning the public repository is enough.</p>
@@ -327,7 +327,7 @@ Common options include:
 - Commit non-secret code changes to your GitHub fork.
 - Save a short note describing the model, prompt, data sources, and output files you produced.
 
-![Screenshot showing the folder-opening workflow used to navigate to `/home/joyvan/work/`.](assets/images/cyverse/cyverse-12-download-results.png)
+![Screenshot showing the folder-opening workflow used to navigate to `/home/jovyan/work/`.](assets/images/cyverse/cyverse-12-download-results.png)
 
 *Navigating to the working folder before saving or downloading results.*
 
@@ -349,7 +349,7 @@ Download these datasets, harmonize them to EPSG:4326 over Colorado, and generate
   https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv
 
 - MACAv2 winter precipitation via OPeNDAP (raster, continuous, variable precipitation, months Dec-Mar):
-  http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
+  https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
 
 - MTBS burned area boundaries (vector, do not rasterize):
   https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip

@@ -17,7 +17,7 @@ Harmonizes fire behavior fuel models, winter precipitation projections, historic
 | Layer | Type | URL |
 |---|---|---|
 | FBFM40 Fuel Models | raster | https://www.landfire.gov/data-downloads/CONUS_LF2024/LF2024_FBFM40_CONUS.zip |
-| Winter Precipitation (CCSM4 RCP8.5) | raster | http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc |
+| Winter Precipitation (CCSM4 RCP8.5) | raster | https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc |
 | MTBS Burned Areas | vector | https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip |
 | Building Footprints | vector | https://minedbuildings.z5.web.core.windows.net/legacy/usbuildings-v2/Utah.geojson.zip |
 
