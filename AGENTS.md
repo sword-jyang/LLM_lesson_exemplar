@@ -20,6 +20,7 @@ Every item links to the detailed section below; none are optional.
 7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
 8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
 9. **If the user names a US state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside the US or outside TIGER (custom AOIs, ecoregions, international locations), see [Regions outside CONUS and international locations](#regions-outside-conus-and-international-locations).
+10. **Run the script with `nohup ... &`** so it executes in the background, then poll for `harmonized_visualization.png` to confirm completion. Never re-run a script that is still running.
 
 If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
 
@@ -989,6 +990,21 @@ normal, not a sign of failure.
 **Do not prompt the user to re-run a script that is still executing.** If you
 are unsure whether it finished, check whether the process is still running or
 whether the expected output files exist before suggesting a retry.
+
+**When running in tool environments with short command timeouts** (e.g. Roo Code,
+Cline, Cursor), run the harmonization script in the background:
+
+```bash
+nohup python workflows/<project_name>/<script>.py > workflows/<project_name>/output/run.log 2>&1 &
+```
+
+Then check for completion by polling for the output PNG:
+
+```bash
+ls workflows/<project_name>/output/harmonized_visualization.png 2>/dev/null && echo "DONE" || echo "STILL RUNNING"
+```
+
+Do NOT re-run the script while it is still executing.
 
 ---
 
