@@ -1,0 +1,122 @@
+name: Weekly URL Health Check
+
+on:
+  schedule:
+    # Every Monday at 8am UTC
+    - cron: "0 8 * * 1"
+  workflow_dispatch: # Allow manual runs from Actions tab
+
+jobs:
+  check-urls:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyyaml requests
+
+      - name: Check all catalog URLs
+        id: health
+        run: |
+          python - <<'SCRIPT'
+          import re, sys, requests, yaml
+
+          CATALOG = "data_catalog.yml"
+          TIMEOUT = 20
+
+          with open(CATALOG) as f:
+              catalog = yaml.safe_load(f)
+
+          urls = []
+          for entry in catalog.get("datasets", []):
+              if entry.get("health_check") == "skip":
+                  continue
+              if "url_template" in entry and entry.get("variants"):
+                  template = entry["url_template"]
+                  variants = entry["variants"]
+                  placeholder = re.findall(r"\{(\w+)\}", template)[0]
+                  sample_url = template.format(**{placeholder: variants[0]})
+                  urls.append((entry["name"], sample_url))
+              else:
+                  urls.append((entry["name"], entry["url"]))
+              if entry.get("labels_url"):
+                  urls.append((entry["name"] + " (labels)", entry["labels_url"]))
+
+          failures = []
+          for name, url in urls:
+              if "dodsC" in url:
+                  check_url = url.split("?")[0].rstrip("/") + ".dds"
+                  method = "GET"
+              else:
+                  check_url = url
+                  method = "HEAD"
+              try:
+                  r = requests.request(
+                      method, check_url,
+                      timeout=TIMEOUT, stream=True,
+                      headers={"User-Agent": "Mozilla/5.0"},
+                      allow_redirects=True,
+                  )
+                  if r.status_code == 405 and method == "HEAD":
+                      r = requests.get(
+                          check_url, timeout=TIMEOUT, stream=True,
+                          headers={"User-Agent": "Mozilla/5.0"},
+                          allow_redirects=True,
+                      )
+                  content_type = (r.headers.get("Content-Type") or "").lower()
+                  if r.status_code >= 400:
+                      failures.append((name, url, f"HTTP {r.status_code}"))
+                      print(f"FAIL {name}: {url} (HTTP {r.status_code})")
+                  elif "text/html" in content_type and method != "GET":
+                      failures.append((name, url, "Returns HTML, not data"))
+                      print(f"FAIL {name}: {url} (HTML page, not data)")
+                  else:
+                      print(f"OK   {name}: {url}")
+              except Exception as e:
+                  failures.append((name, url, str(e)))
+                  print(f"FAIL {name}: {url} ({e})")
+
+          if failures:
+              body_lines = ["The weekly URL health check found dead links in `data_catalog.yml`:\n"]
+              for name, url, reason in failures:
+                  body_lines.append(f"- **{name}**: `{url}` — {reason}")
+              body_lines.append("\nPer catalog policy, entries with dead URLs should be removed from `data_catalog.yml`.")
+              body = "\n".join(body_lines)
+
+              with open("issue_body.txt", "w") as f:
+                  f.write(body)
+              with open("has_failures.txt", "w") as f:
+                  f.write("true")
+              print(f"\n{len(failures)} URL(s) failed.")
+              sys.exit(0)  # Don't fail the job — we open an issue instead
+          else:
+              with open("has_failures.txt", "w") as f:
+                  f.write("false")
+              print("\nAll URLs healthy.")
+          SCRIPT
+
+      - name: Open issue for dead URLs
+        if: hashFiles('issue_body.txt') != ''
+        run: |
+          if [ "$(cat has_failures.txt)" = "true" ]; then
+            # Check if an open issue already exists
+            EXISTING=$(gh issue list --label "url-health" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --body "$(cat issue_body.txt)"
+              echo "Updated existing issue #$EXISTING"
+            else
+              gh issue create \
+                --title "Dead URLs in data_catalog.yml" \
+                --body "$(cat issue_body.txt)" \
+                --label "url-health"
+              echo "Created new issue"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

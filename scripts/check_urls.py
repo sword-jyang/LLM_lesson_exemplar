@@ -33,6 +33,21 @@ def check_url(url: str) -> tuple[bool, str]:
     """Check a single URL. Returns (ok, message)."""
     headers = {"User-Agent": "Mozilla/5.0"}
 
+    # OPeNDAP URLs (THREDDS dodsC) don't respond to normal GET/HEAD.
+    # Request the .dds suffix (dataset descriptor — lightweight metadata).
+    if "dodsC" in url:
+        dds_url = url.split("?")[0].rstrip("/") + ".dds"
+        request = urllib.request.Request(dds_url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return True, "OPeNDAP endpoint (verified via .dds)"
+        except urllib.error.HTTPError as e:
+            return False, f"OPeNDAP endpoint not reachable: HTTP {e.code}: {e.reason}"
+        except urllib.error.URLError as e:
+            return False, f"OPeNDAP endpoint not reachable: {e.reason}"
+        except Exception as e:
+            return False, f"OPeNDAP endpoint not reachable: {e}"
+
     # Try HEAD first (fast, no body download)
     for method in ("HEAD", "GET"):
         request = urllib.request.Request(url, headers=headers, method=method)

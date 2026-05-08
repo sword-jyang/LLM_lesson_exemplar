@@ -184,14 +184,6 @@ datasets:
       HOLC neighborhood grades joined to 2020 census tracts. GeoJSON, keep as vector.
       From ESIIL Data Library justice/redlining.
 
-  - name: HOLC Redlining — Philadelphia 1937
-    type: vector
-    source: Mapping Inequality / Richmond DSL
-    url: https://dsl.richmond.edu/panorama/redlining/static/downloads/geojson/PAPhiladelphia1937.geojson
-    topics: [justice, demographics, historical, redlining]
-    notes: >
-      Historic HOLC redlining map for Philadelphia as GeoJSON. Keep as vector.
-      Replace city/state in URL for other cities. From ESIIL Data Library justice/redlining.
 
   # ── 3. Open Data ───────────────────────────────────────────────────────────
   # Other open and publicly available datasets. Organized into two subsections
