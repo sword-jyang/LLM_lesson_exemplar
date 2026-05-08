@@ -19,6 +19,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 import shutil
+import urllib.error
 import urllib.request
 import urllib.parse
 import zipfile
@@ -50,6 +51,15 @@ BBox = tuple[float, float, float, float]
 DISCOVERED_COLOR_MAP: dict | None = None
 # Global labels map: integer value -> short label string (e.g. 101 -> "GR1")
 DISCOVERED_LABELS: dict | None = None
+
+
+class DatasetDownloadError(RuntimeError):
+    """Raised when a dataset URL fails to download.
+
+    The error message is written to be readable by both humans and LLM agents,
+    so the agent can report the failure and ask the user for a corrected URL.
+    """
+
 
 # Tokens that should always be rendered in ALL CAPS in display labels.
 _KNOWN_ACRONYMS: set[str] = {
@@ -214,23 +224,48 @@ def download_file(url: str, output_dir: Path, verbose: bool = True) -> Path:
 
     _log(f"Downloading: {url}", verbose)
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(request) as response, open(output_path, "wb") as f:
-        total = int(response.headers.get("Content-Length", 0))
-        downloaded = 0
-        chunk_size = 1024 * 256  # 256 KB chunks
-        while True:
-            chunk = response.read(chunk_size)
-            if not chunk:
-                break
-            f.write(chunk)
-            downloaded += len(chunk)
+    try:
+        with urllib.request.urlopen(request) as response, open(output_path, "wb") as f:
+            total = int(response.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk_size = 1024 * 256  # 256 KB chunks
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if verbose and total > 0:
+                    pct = downloaded * 100 // total
+                    mb = downloaded / 1_048_576
+                    total_mb = total / 1_048_576
+                    print(f"\r  {mb:.1f} / {total_mb:.1f} MB ({pct}%)", end="", flush=True)
             if verbose and total > 0:
-                pct = downloaded * 100 // total
-                mb = downloaded / 1_048_576
-                total_mb = total / 1_048_576
-                print(f"\r  {mb:.1f} / {total_mb:.1f} MB ({pct}%)", end="", flush=True)
-        if verbose and total > 0:
-            print()  # newline after progress
+                print()  # newline after progress
+    except urllib.error.HTTPError as e:
+        if output_path.exists():
+            output_path.unlink()
+        raise DatasetDownloadError(
+            f"URL does not work: {url}\n"
+            f"  HTTP Error {e.code}: {e.reason}\n"
+            f"  Please provide a different URL for this dataset."
+        ) from e
+    except urllib.error.URLError as e:
+        if output_path.exists():
+            output_path.unlink()
+        raise DatasetDownloadError(
+            f"URL does not work: {url}\n"
+            f"  Connection error: {e.reason}\n"
+            f"  Please check the URL and provide a valid one."
+        ) from e
+    except Exception as e:
+        if output_path.exists():
+            output_path.unlink()
+        raise DatasetDownloadError(
+            f"URL does not work: {url}\n"
+            f"  Error: {e}\n"
+            f"  Please provide a different URL for this dataset."
+        ) from e
 
     return output_path
 
@@ -276,13 +311,32 @@ def download_arcgis_image_server(
     
     _log(f"Downloading from ArcGIS ImageServer: {url}", verbose)
     request = urllib.request.Request(export_url, headers={"User-Agent": "Mozilla/5.0"})
-    
+
     # Download to temp file first
     import tempfile
-    with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
-        tmp_path = tmp.name
-        with urllib.request.urlopen(request) as response:
-            shutil.copyfileobj(response, tmp)
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
+            tmp_path = tmp.name
+            with urllib.request.urlopen(request) as response:
+                shutil.copyfileobj(response, tmp)
+    except urllib.error.HTTPError as e:
+        raise DatasetDownloadError(
+            f"ArcGIS ImageServer URL does not work: {url}\n"
+            f"  HTTP Error {e.code}: {e.reason}\n"
+            f"  Please provide a different URL for this dataset."
+        ) from e
+    except urllib.error.URLError as e:
+        raise DatasetDownloadError(
+            f"ArcGIS ImageServer URL does not work: {url}\n"
+            f"  Connection error: {e.reason}\n"
+            f"  Please check the URL and provide a valid one."
+        ) from e
+    except Exception as e:
+        raise DatasetDownloadError(
+            f"ArcGIS ImageServer URL does not work: {url}\n"
+            f"  Error: {e}\n"
+            f"  Please provide a different URL for this dataset."
+        ) from e
     
     # Read the downloaded file and add geotransform
     xmin, ymin, xmax, ymax = bbox
@@ -381,7 +435,11 @@ def download_wms_coverage(
         return output_path
     except Exception as e:
         _log(f"WMS request failed: {e}", verbose)
-        raise RuntimeError(f"Failed to download WMS coverage: {e}")
+        raise DatasetDownloadError(
+            f"WMS URL does not work: {wms_url}\n"
+            f"  Error: {e}\n"
+            f"  Please check the WMS endpoint and provide a valid URL."
+        ) from e
 
 
 def download_wcs_coverage(
@@ -498,7 +556,11 @@ def download_wcs_coverage(
             return output_path
         except Exception as e2:
             _log(f"WCS 2.0.1 request also failed: {e2}", verbose)
-            raise RuntimeError(f"Failed to download WCS coverage: {e2}")
+            raise DatasetDownloadError(
+                f"WCS URL does not work: {wcs_url}\n"
+                f"  Error: {e2}\n"
+                f"  Please check the WCS endpoint and provide a valid URL."
+            ) from e2
 
 
 def download_stac_item(
@@ -547,18 +609,28 @@ def download_stac_item(
     _log(f"Searching STAC catalog: {catalog_url}", verbose)
     _log(f"  collection={collection}  asset={asset_key}  datetime={datetime}", verbose)
 
-    client = pystac_client.Client.open(catalog_url)
-    search = client.search(
-        collections=[collection],
-        bbox=list(bbox),
-        datetime=datetime,
-        query=query or {},
-        max_items=50,
-    )
-    items = list(search.items())
+    try:
+        client = pystac_client.Client.open(catalog_url)
+        search = client.search(
+            collections=[collection],
+            bbox=list(bbox),
+            datetime=datetime,
+            query=query or {},
+            max_items=50,
+        )
+        items = list(search.items())
+    except Exception as e:
+        raise DatasetDownloadError(
+            f"STAC catalog URL does not work: {catalog_url}\n"
+            f"  Error: {e}\n"
+            f"  Please check the STAC catalog URL and provide a valid one."
+        ) from e
     if not items:
-        raise FileNotFoundError(
-            f"No STAC items found for collection={collection!r} bbox={bbox} datetime={datetime!r}"
+        raise DatasetDownloadError(
+            f"No STAC items found at: {catalog_url}\n"
+            f"  collection={collection!r}  bbox={bbox}  datetime={datetime!r}\n"
+            f"  Please check the collection name, date range, and bounding box, "
+            f"or provide a different STAC catalog URL."
         )
 
     # Pick the least cloudy item
@@ -824,7 +896,14 @@ def _fetch_jja_subset(url: str, variable: str, xmin: float, xmax: float, ymin: f
     Intended to be called in a thread alongside a sibling fetch.
     """
     import xarray as xr
-    ds = xr.open_dataset(url, engine="netcdf4", chunks={"time": 12})
+    try:
+        ds = xr.open_dataset(url, engine="netcdf4", chunks={"time": 12})
+    except Exception as e:
+        raise DatasetDownloadError(
+            f"OPeNDAP URL does not work: {url}\n"
+            f"  Error: {e}\n"
+            f"  Please check the URL and provide a valid OPeNDAP endpoint."
+        ) from e
     arr = ds[variable].sel(
         lon=slice(xmin + 360, xmax + 360),  # MACAv2 uses 0–360 longitude
         lat=slice(ymin, ymax),
@@ -961,7 +1040,14 @@ def fetch_netcdf_seasonal_geotiff(
     _log(f"Fetching {variable} via OPeNDAP ({season_label}, bbox subset)...", verbose)
     xmin, ymin, xmax, ymax = bbox
 
-    ds = xr.open_dataset(url, engine="netcdf4", chunks={"time": 12})
+    try:
+        ds = xr.open_dataset(url, engine="netcdf4", chunks={"time": 12})
+    except Exception as e:
+        raise DatasetDownloadError(
+            f"OPeNDAP URL does not work: {url}\n"
+            f"  Error: {e}\n"
+            f"  Please check the URL and provide a valid OPeNDAP endpoint."
+        ) from e
     arr = ds[variable].sel(
         lon=slice(xmin + 360, xmax + 360),
         lat=slice(ymin, ymax),
