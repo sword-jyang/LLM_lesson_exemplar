@@ -13,14 +13,14 @@ Every item links to the detailed section below; none are optional.
 
 1. **Place the script in `workflows/<project_name>/`** — never in `examples/` (read-only teaching material).
 2. **Start the script with the bootstrap header** (sys.path insert) — see [Required Script Header](#required-script-header). Skipping this causes `ModuleNotFoundError: No module named 'src'` when run from any working directory other than the repo root.
-3. **Check `data_catalog.yml` before searching elsewhere** — see [Check the catalog before searching elsewhere](#check-the-catalog-before-searching-elsewhere). Use `python scripts/find_dataset.py <keyword>` for a one-shot lookup.
+3. **Run `python scripts/find_dataset.py <keyword>` to search the data catalog** before searching the web — see [Check the catalog before searching elsewhere](#check-the-catalog-before-searching-elsewhere). Do NOT open or grep `data_catalog.yml` manually; the script is faster and more reliable.
 4. **Set `output_dir=Path(__file__).parent / "output"`** so outputs co-locate with the script.
 5. **Save the static visualization as exactly `harmonized_visualization.png`** — the mkdocs build hook in [hooks.py](hooks.py) is hardcoded to that filename. Different filenames silently fail to appear on the website.
 6. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
 7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
 8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
 9. **If the user names a US state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside the US or outside TIGER (custom AOIs, ecoregions, international locations), see [Regions outside CONUS and international locations](#regions-outside-conus-and-international-locations).
-10. **Run the script with `nohup ... &`** so it executes in the background, then poll for `harmonized_visualization.png` to confirm completion. Never re-run a script that is still running.
+10. **Run the script with `nohup ... &`** so it executes in the background. **Check progress with `cat workflows/<project_name>/output/.status`** — it will say `RUNNING`, `DONE`, or `FAILED`. First check after 2 minutes, then every 3 minutes. Never re-run a script that is still running.
 
 If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
 
@@ -551,8 +551,13 @@ The agent MUST:
 
 If:
 
-- Download fails → retry or notify user
+- Download fails → **stop and tell the user which URL failed and why**.
+  You MAY suggest alternatives from `data_catalog.yml` (run `find_dataset.py`),
+  but do NOT search the web for replacement URLs on your own.
+  Always wait for the user to confirm before substituting any dataset.
 - Archive cannot be read → report issue
+- URL returns an HTML page instead of data → tell the user this is a portal
+  link, not a direct download URL, and ask for a direct download URL.
 - No valid geospatial files found → stop and ask user
 
 The agent MUST NOT proceed with incomplete or ambiguous data.
@@ -983,7 +988,7 @@ The agent SHOULD NOT:
 
 ### Be Patient With Long-Running Scripts
 
-Harmonization scripts can take **up to 10 minutes** to run — downloading data,
+Harmonization scripts typically take **5–15 minutes** to run — downloading data,
 reprojecting, and generating the final HTML/PNG outputs all take time. This is
 normal, not a sign of failure.
 
@@ -998,13 +1003,27 @@ Cline, Cursor), run the harmonization script in the background:
 nohup python workflows/<project_name>/<script>.py > workflows/<project_name>/output/run.log 2>&1 &
 ```
 
-Then check for completion by polling for the output PNG:
+The script writes a `.status` file in the output directory that tells you
+exactly what is happening. **Use this to poll — not `ls` for the PNG.**
 
+**Check status:**
 ```bash
-ls workflows/<project_name>/output/harmonized_visualization.png 2>/dev/null && echo "DONE" || echo "STILL RUNNING"
+cat workflows/<project_name>/output/.status
 ```
 
-Do NOT re-run the script while it is still executing.
+**The status file shows progress per dataset, for example:**
+- `RUNNING: processing dataset 1/4: FBFM40 Fuel Models` — downloading/processing.
+- `RUNNING: saved 2/4: harmonized_mtbs_burned_areas.geojson` — dataset 2 done, moving to 3.
+- `RUNNING: saved 4/4: harmonized_vpd.tif — generating visualization next` — all datasets done, building PNG/HTML.
+- `DONE: 7m 23s` — finished successfully. Proceed with follow-up tasks.
+- `FAILED: URL does not work: https://... Please provide a different URL.` — something went wrong. Read the error and fix it.
+
+**Polling rules:**
+1. First poll: **2 minutes** after starting the script.
+2. If status is `RUNNING`, wait **3 more minutes** before checking again.
+3. If status is `FAILED`, read the error and act on it. Do NOT re-run the
+   same script without fixing the problem first.
+4. Do NOT re-run the script while status is `RUNNING`.
 
 ---
 

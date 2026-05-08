@@ -225,7 +225,19 @@ def download_file(url: str, output_dir: Path, verbose: bool = True) -> Path:
     _log(f"Downloading: {url}", verbose)
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
-        with urllib.request.urlopen(request) as response, open(output_path, "wb") as f:
+        with urllib.request.urlopen(request, timeout=300) as response, open(output_path, "wb") as f:
+            # Check Content-Type before downloading — reject HTML pages that
+            # masquerade as successful responses (e.g. portal login pages,
+            # file-sharing UI pages that return HTTP 200 but no actual data).
+            content_type = (response.headers.get("Content-Type") or "").lower()
+            if "text/html" in content_type:
+                raise DatasetDownloadError(
+                    f"URL does not point to a downloadable file: {url}\n"
+                    f"  The server returned an HTML page (Content-Type: {content_type}).\n"
+                    f"  This is likely a web viewer or portal link, not a direct download URL.\n"
+                    f"  Please provide a direct download URL for this dataset."
+                )
+
             total = int(response.headers.get("Content-Length", 0))
             downloaded = 0
             chunk_size = 1024 * 256  # 256 KB chunks
@@ -242,6 +254,10 @@ def download_file(url: str, output_dir: Path, verbose: bool = True) -> Path:
                     print(f"\r  {mb:.1f} / {total_mb:.1f} MB ({pct}%)", end="", flush=True)
             if verbose and total > 0:
                 print()  # newline after progress
+    except DatasetDownloadError:
+        if output_path.exists():
+            output_path.unlink()
+        raise
     except urllib.error.HTTPError as e:
         if output_path.exists():
             output_path.unlink()
@@ -694,7 +710,15 @@ def discover_dataset_file(dataset_dir: Path, data_type: str) -> Path:
         )
 
     if not candidates:
-        raise FileNotFoundError(f"No {data_type} dataset found in {dataset_dir}")
+        raise FileNotFoundError(
+            f"No {data_type} files found in {dataset_dir}. "
+            f"Expected {'*.tif / *.tiff / *.img' if data_type == 'raster' else '*.geojson / *.shp'} files."
+        )
+
+    if len(candidates) > 1:
+        print(f"  WARNING: Found {len(candidates)} {data_type} files, using: {candidates[0].name}")
+        for c in candidates[1:]:
+            print(f"    (skipped: {c.name})")
 
     return candidates[0]
 
@@ -2526,7 +2550,75 @@ def _create_interactive_visualization_impl(
     return m
 
 
+def _write_status(output_dir: Path, status: str, detail: str = "") -> None:
+    """Write a machine-readable status file for LLM agents to poll."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    status_path = output_dir / ".status"
+    msg = status if not detail else f"{status}: {detail}"
+    status_path.write_text(msg + "\n")
+
+
 def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], folium.Map | None]:
+    import time as _time
+    _wall_start = _time.time()
+    n_datasets = len(workflow.datasets)
+
+    workflow.output_dir.mkdir(parents=True, exist_ok=True)
+    _write_status(workflow.output_dir, "RUNNING", f"started with {n_datasets} datasets")
+
+    _log(
+        f"\n{'='*60}\n"
+        f"HARMONIZATION STARTED: {workflow.name}\n"
+        f"  Datasets: {n_datasets}\n"
+        f"  CRS: {workflow.target_crs}  Resolution: {workflow.target_resolution}\n"
+        f"  Output: {workflow.output_dir}\n"
+        f"  This typically takes 5-15 minutes. Do NOT re-run while in progress.\n"
+        f"  Check status: cat {workflow.output_dir}/.status\n"
+        f"{'='*60}",
+        workflow.verbose,
+    )
+
+    try:
+        return _run_harmonization_inner(workflow, _wall_start)
+    except DatasetDownloadError as e:
+        _write_status(workflow.output_dir, "FAILED", str(e))
+        raise
+    except Exception as e:
+        _write_status(workflow.output_dir, "FAILED", str(e))
+        raise
+
+
+def _run_harmonization_inner(workflow: ExampleWorkflow, _wall_start: float) -> tuple[list[Path], folium.Map | None]:
+    import time as _time
+
+    # ── Validate inputs early so bad config fails fast, not after a 10-min download ──
+    if not workflow.datasets:
+        raise ValueError("No datasets provided. Add at least one DatasetSpec to the workflow.")
+    if workflow.target_resolution <= 0:
+        raise ValueError(
+            f"target_resolution must be positive, got {workflow.target_resolution}. "
+            f"For geographic CRS (EPSG:4326) use degrees (e.g. 0.00243), "
+            f"for projected CRS use meters (e.g. 270)."
+        )
+    xmin, ymin, xmax, ymax = workflow.target_extent
+    if xmin >= xmax or ymin >= ymax:
+        raise ValueError(
+            f"target_extent is invalid: ({xmin}, {ymin}, {xmax}, {ymax}). "
+            f"Must be (xmin, ymin, xmax, ymax) where xmin < xmax and ymin < ymax."
+        )
+    from rasterio.crs import CRS as _CRS_check
+    try:
+        _CRS_check.from_user_input(workflow.target_crs)
+    except Exception as e:
+        raise ValueError(
+            f"target_crs is not a valid CRS: {workflow.target_crs!r}. Error: {e}"
+        ) from e
+    for ds in workflow.datasets:
+        if not ds.url:
+            raise ValueError(f"Dataset {ds.name!r} has no URL. Every DatasetSpec needs a url.")
+        if ds.data_type not in ("raster", "vector"):
+            raise ValueError(f"Dataset {ds.name!r} has invalid data_type={ds.data_type!r}. Must be 'raster' or 'vector'.")
+
     # Reset module-level color map state so workflows don't bleed into each other
     # when multiple ExampleWorkflows run in the same process (e.g. in a notebook).
     import src.geospatial_harmonizer as _self
@@ -2587,8 +2679,14 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
     with TemporaryDirectory(prefix=f"{workflow.name}_") as tmp:
         tmp_dir = Path(tmp)
 
+        _n_total = len(workflow.datasets)
         for _ds_idx, dataset in enumerate(workflow.datasets, 1):
-            _log(f"\n[{_ds_idx}/{len(workflow.datasets)}] {dataset.display_name or _format_layer_name(dataset.name)}", workflow.verbose)
+            _ds_label = dataset.display_name or _format_layer_name(dataset.name)
+            _log(f"\n[{_ds_idx}/{_n_total}] {_ds_label}", workflow.verbose)
+            _write_status(
+                workflow.output_dir, "RUNNING",
+                f"processing dataset {_ds_idx}/{_n_total}: {_ds_label}",
+            )
             dataset_dir = tmp_dir / dataset.name
             dataset_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2789,6 +2887,11 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
 
             output_files.append(output_path)
             viz_inputs.append((dataset.name, output_path))
+            _write_status(
+                workflow.output_dir, "RUNNING",
+                f"saved {_ds_idx}/{_n_total}: {output_path.name}"
+                + (" — generating visualization next" if _ds_idx == _n_total else ""),
+            )
 
     interactive_map = None
     if workflow.create_visualization and output_files:
@@ -2831,6 +2934,18 @@ def run_harmonization_example(workflow: ExampleWorkflow) -> tuple[list[Path], fo
             output_dir=workflow.output_dir,
             verbose=workflow.verbose,
         )
+
+    _elapsed = _time.time() - _wall_start
+    _min, _sec = divmod(int(_elapsed), 60)
+    _write_status(workflow.output_dir, "DONE", f"{_min}m {_sec}s")
+    _log(
+        f"\n{'='*60}\n"
+        f"HARMONIZATION FINISHED: {workflow.name}\n"
+        f"  Wall time: {_min}m {_sec}s\n"
+        f"  Outputs: {workflow.output_dir}\n"
+        f"{'='*60}",
+        workflow.verbose,
+    )
 
     _print_post_run_checklist(workflow.name, workflow.verbose)
     return output_files, interactive_map
