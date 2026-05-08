@@ -11,16 +11,17 @@ This repository is a **template for scientists** learning how AI can help harmon
 When a scientist asks for a new harmonization analysis, you MUST do all of the following.
 Every item links to the detailed section below; none are optional.
 
-1. **Place the script in `workflows/<project_name>/`** — never in `examples/` (read-only teaching material).
-2. **Start the script with the bootstrap header** (sys.path insert) — see [Required Script Header](#required-script-header). Skipping this causes `ModuleNotFoundError: No module named 'src'` when run from any working directory other than the repo root.
-3. **Run `python scripts/find_dataset.py <keyword>` to search the data catalog** before searching the web — see [Check the catalog before searching elsewhere](#check-the-catalog-before-searching-elsewhere). Do NOT open or grep `data_catalog.yml` manually; the script is faster and more reliable.
-4. **Set `output_dir=Path(__file__).parent / "output"`** so outputs co-locate with the script.
-5. **Save the static visualization as exactly `harmonized_visualization.png`** — the mkdocs build hook in [hooks.py](hooks.py) is hardcoded to that filename. Different filenames silently fail to appear on the website.
-6. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
-7. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
-8. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
-9. **If the user names a US state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside the US or outside TIGER (custom AOIs, ecoregions, international locations), see [Regions outside CONUS and international locations](#regions-outside-conus-and-international-locations).
-10. **Run the script with `nohup ... &`** so it executes in the background. **Check progress with `cat workflows/<project_name>/output/.status`** — it will say `RUNNING`, `DONE`, or `FAILED`. First check after 2 minutes, then every 3 minutes. Never re-run a script that is still running.
+1. **Validate all user-provided URLs FIRST** by running `python scripts/check_urls.py <url1> <url2> ...` before writing any code. If any URL fails, stop and tell the user which URLs are broken. You MAY suggest alternatives from the data catalog (step 2) for the broken ones, but always wait for the user to confirm before proceeding. Do NOT write a script with broken URLs.
+2. **Search the data catalog ONLY when needed** — run `python scripts/find_dataset.py <keyword>` when: (a) the user asks for data by topic without providing URLs, (b) a user-provided URL failed and you need to suggest an alternative, or (c) the user asks what's available. Do NOT search the catalog when the user already provided working URLs. Do NOT open or grep `data_catalog.yml` manually; the script is faster and more reliable. See [Check the catalog before searching elsewhere](#check-the-catalog-before-searching-elsewhere).
+3. **Place the script in `workflows/<project_name>/`** — never in `examples/` (read-only teaching material).
+4. **Start the script with the bootstrap header** (sys.path insert) — see [Required Script Header](#required-script-header). Skipping this causes `ModuleNotFoundError: No module named 'src'` when run from any working directory other than the repo root.
+5. **Set `output_dir=Path(__file__).parent / "output"`** so outputs co-locate with the script.
+6. **Save the static visualization as exactly `harmonized_visualization.png`** — the mkdocs build hook in [hooks.py](hooks.py) is hardcoded to that filename. Different filenames silently fail to appear on the website.
+7. **Create `docs/workflows/<project_name>.md`** from the [template](#template-for-docsworkflowsproject_namemd) — `tests/test_doc_pages.py` will fail if any `<PLACEHOLDER>` text remains.
+8. **Append a new entry to `PROMPT_ACTION_LOG.md`** with the user's exact prompt verbatim.
+9. **Add any newly used datasets to `data_catalog.yml`** (only if their URL passes `tests/test_url_health.py`).
+10. **If the user names a US state, county, or place, run `python scripts/region_extent.py <type> <name> [<state>] [--crs <target_crs>]`** to get `target_extent` — never guess from model knowledge, and pass `--crs` whenever `target_crs` ≠ EPSG:4326. **Always set `clip_boundary`** to clip outputs to the actual boundary polygon, not just the rectangular bounding box (e.g. `clip_boundary="state:<name>"`). See [Resolving named regions to a bbox and boundary clipping](#resolving-named-regions-to-a-bbox-and-boundary-clipping). For regions outside the US or outside TIGER (custom AOIs, ecoregions, international locations), see [Regions outside CONUS and international locations](#regions-outside-conus-and-international-locations).
+11. **Run the script with `nohup ... &`** so it executes in the background. **Check progress with `cat workflows/<project_name>/output/.status`** — it will say `RUNNING`, `DONE`, or `FAILED`. First check after 2 minutes, then every 3 minutes. Never re-run a script that is still running.
 
 If you skip any of these, the workflow is incomplete. Each rule is detailed in a section below.
 
@@ -195,15 +196,19 @@ The image path in the Markdown file must be:
 It is seeded with the Colorado fire risk example datasets and grows as new
 workflows are created.
 
-### Check the catalog before searching elsewhere
+### When to search the data catalog
 
-Whenever a user requests data — by topic ("fire risk in Wyoming"), by name
-("NLCD land cover"), or by region ("building footprints for Texas") — the agent
-MUST first consult `data_catalog.yml` to see if a matching URL already exists.
-The catalog is the canonical, health-checked source of truth for this repo;
-URLs found there have already been verified to download and harmonize correctly.
+**If the user provided URLs:** do NOT search the catalog. Validate the URLs
+with `check_urls.py` and use them directly if they pass. Only search the
+catalog if a URL fails and you need to suggest an alternative.
 
-Workflow:
+**If the user requests data by topic, name, or region** without providing URLs
+(e.g. "fire risk in Wyoming", "NLCD land cover", "building footprints for
+Texas") — search the catalog first. The catalog is the canonical,
+health-checked source of truth; URLs found there have already been verified
+to download and harmonize correctly.
+
+Catalog lookup workflow:
 
 1. **Run `python scripts/find_dataset.py <keyword> [<keyword> ...]`.** This is
    the one-shot lookup: it scans every entry's name, source, notes, topics,
@@ -215,8 +220,8 @@ Workflow:
    python scripts/find_dataset.py climate precipitation
    python scripts/find_dataset.py building wyoming
    ```
-   This replaces the older multi-step `grep + Read offset/limit + substitute`
-   protocol — a weak model running one command is far more reliable.
+   Do NOT open or grep `data_catalog.yml` manually; the script is faster and
+   more reliable.
 2. If a matching entry exists, use that URL directly — do NOT search the web,
    the ESIIL Data Library, or external sources for an alternative.
 3. If multiple entries match (e.g. NLCD has multiple years), surface the choices
@@ -224,15 +229,6 @@ Workflow:
 4. Only fall through to the ESIIL Data Library or web search if no entry matches.
 5. If you discover a new URL through the fallback path AND it passes the health
    check after a successful workflow, add it to the catalog (see rules below).
-
-If `find_dataset.py` is unavailable for some reason, the manual fallback is
-`grep -nE "^  - name:" data_catalog.yml` to list names, then `Read offset=<line>
-limit=12` to pull a specific entry.
-
-Skipping this check causes three failures: (a) the user waits while the agent
-re-searches sources we already vetted, (b) the agent may pick a stale or
-unverified URL when a known-good one exists, and (c) the catalog stops being
-authoritative because it's only used for writing, never for reading.
 
 ### Templated entries (url_template + variants)
 
