@@ -1769,6 +1769,12 @@ def _create_visualization_impl(
                 path, ax, facecolor=style["color"], edgecolor='black',
                 linewidth=0.5, alpha=style["fillOpacity"])
 
+            # Use the full target extent for the vector panel so it matches
+            # the raster panels. Fall back to the vector's own bounds.
+            if _scale_extent is not None:
+                ax.set_xlim(_scale_extent[0], _scale_extent[2])
+                ax.set_ylim(_scale_extent[1], _scale_extent[3])
+
             # Legend for vector panel
             legend_patch = Patch(facecolor=style["color"], edgecolor='black',
                                 alpha=style["fillOpacity"], label=display)
@@ -1786,15 +1792,18 @@ def _create_visualization_impl(
             ax.axis("off")
 
             # Boundary overlay
-            if _boundary is not None and tb is not None:
+            panel_extent = _scale_extent or tb
+            if _boundary is not None and panel_extent is not None:
                 try:
                     _add_boundary_overlay(ax, _boundary, data_shape=None,
-                                          extent=tb)
+                                          extent=panel_extent)
                 except Exception:
                     pass
 
             # Scale bar + frame + letter
-            if tb is not None:
+            if _scale_extent is not None:
+                layer_bounds = (_scale_extent[0], _scale_extent[1], _scale_extent[2], _scale_extent[3])
+            elif tb is not None:
                 layer_bounds = (tb[0], tb[1], tb[2], tb[3])
             crs_for_bar = _scale_crs or vec_crs
             if layer_bounds and crs_for_bar:
@@ -2475,6 +2484,30 @@ def _create_interactive_visualization_impl(
             else:
                 with open(path) as f:
                     geojson_data = json.load(f)
+
+            # Folium expects EPSG:4326 coordinates. If the harmonized GeoJSON
+            # is in a projected CRS, reproject it to 4326 via ogr2ogr.
+            needs_reproject = False
+            try:
+                with fiona.open(str(path)) as _src:
+                    _vec_crs = _src.crs_wkt or ""
+                    if _vec_crs and "4326" not in _vec_crs:
+                        needs_reproject = True
+            except Exception:
+                pass
+
+            if needs_reproject:
+                try:
+                    from src._gdal_utils import ogr2ogr as _ogr2ogr
+                    import tempfile as _tmpmod
+                    with _tmpmod.NamedTemporaryFile(suffix=".geojson", delete=False) as _tmp:
+                        _ogr2ogr(path, Path(_tmp.name), t_srs="EPSG:4326")
+                        with open(_tmp.name) as f:
+                            geojson_data = json.load(f)
+                        Path(_tmp.name).unlink(missing_ok=True)
+                    _log("  Reprojected vector to EPSG:4326 for interactive map", verbose)
+                except (ImportError, RuntimeError):
+                    pass  # Best effort — if ogr2ogr unavailable, use as-is
 
             geojson_str = json.dumps(geojson_data)
             geojson_layer = folium.GeoJson(
