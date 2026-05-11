@@ -1368,13 +1368,28 @@ def rasterize_vector_to_grid(
         with tempfile.TemporaryDirectory() as tmpdir:
             clipped_path = Path(tmpdir) / "clipped.geojson"
             ogr_kwargs = {"t_srs": grid.crs, "output_format": "GeoJSON"}
+
+            # ogr2ogr -clipsrc and -spat operate in the SOURCE CRS,
+            # so reproject clip geometry/extent to match the input file.
+            with fiona.open(str(input_path)) as src_file:
+                src_crs = src_file.crs_wkt or "EPSG:4326"
+
             if grid.clip_geometry is not None:
                 _log("  Clipping vector to boundary polygon", verbose)
+                clip_geom = grid.clip_geometry
+                if src_crs != grid.crs:
+                    transformer = pyproj.Transformer.from_crs(grid.crs, src_crs, always_xy=True)
+                    clip_geom = shapely_transform(transformer.transform, clip_geom)
                 clip_file = Path(tmpdir) / "clip_boundary.geojson"
-                write_geometry_to_geojson(grid.clip_geometry, grid.crs, clip_file)
+                write_geometry_to_geojson(clip_geom, src_crs, clip_file)
                 ogr_kwargs["clipsrc"] = str(clip_file)
             else:
-                ogr_kwargs["spat"] = (xmin, ymin, xmax, ymax)
+                if src_crs != grid.crs:
+                    from rasterio.warp import transform_bounds
+                    spat = transform_bounds(grid.crs, src_crs, xmin, ymin, xmax, ymax)
+                else:
+                    spat = (xmin, ymin, xmax, ymax)
+                ogr_kwargs["spat"] = spat
 
             _ogr2ogr(input_path, clipped_path, **ogr_kwargs)
 
@@ -1476,12 +1491,26 @@ def harmonize_vector(
         if grid.clip_geometry is not None:
             _log("  Clipping vector to boundary polygon", verbose)
             with tempfile.TemporaryDirectory() as tmpdir:
+                # ogr2ogr -clipsrc expects the clip geometry in the SOURCE CRS,
+                # not the target CRS. Reproject the clip geometry to match.
+                clip_geom = grid.clip_geometry
+                with fiona.open(str(input_path)) as src_file:
+                    src_crs = src_file.crs_wkt or "EPSG:4326"
+                if src_crs != grid.crs:
+                    transformer = pyproj.Transformer.from_crs(grid.crs, src_crs, always_xy=True)
+                    clip_geom = shapely_transform(transformer.transform, clip_geom)
                 clip_file = Path(tmpdir) / "clip_boundary.geojson"
-                write_geometry_to_geojson(grid.clip_geometry, grid.crs, clip_file)
+                write_geometry_to_geojson(clip_geom, src_crs, clip_file)
                 ogr_kwargs["clipsrc"] = str(clip_file)
                 _ogr2ogr(input_path, output_path, **ogr_kwargs)
         else:
+            # -spat also operates in source CRS, so reproject the extent
             xmin, ymin, xmax, ymax = grid.extent
+            with fiona.open(str(input_path)) as src_file:
+                src_crs = src_file.crs_wkt or "EPSG:4326"
+            if src_crs != grid.crs:
+                from rasterio.warp import transform_bounds
+                xmin, ymin, xmax, ymax = transform_bounds(grid.crs, src_crs, xmin, ymin, xmax, ymax)
             ogr_kwargs["spat"] = (xmin, ymin, xmax, ymax)
             _ogr2ogr(input_path, output_path, **ogr_kwargs)
 
