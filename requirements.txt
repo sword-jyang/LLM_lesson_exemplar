@@ -8,9 +8,16 @@ matplotlib>=3.5
 Pillow>=9.0
 pyproj>=3.4
 shapely>=2.0
-geopandas>=0.14
+fiona>=1.10
 folium>=0.14
 branca>=0.6
+
+# Spatial analytics (SQL-based, memory-efficient)
+duckdb>=1.0
+
+# System dependency (not a pip package):
+#   apt install gdal-bin
+# Provides: ogr2ogr, ogrinfo, gdalwarp, gdal_rasterize, gdal_translate
 
 # Configuration support for examples
 pyyaml>=6.0

@@ -27,15 +27,18 @@ import io
 import base64
 import xml.etree.ElementTree as ET
 
-import geopandas as gpd
+import fiona
+import json
 import matplotlib.pyplot as plt
 import numpy as np
+import pyproj
 import rasterio
 from rasterio.features import rasterize
 from rasterio.transform import from_bounds
 from rasterio.warp import reproject, Resampling
 from rasterio import mask
-from shapely.geometry import box
+from shapely.geometry import box, shape as shapely_shape, mapping as shapely_mapping
+from shapely.ops import transform as shapely_transform, unary_union
 
 try:
     import folium
@@ -1162,30 +1165,41 @@ def resolve_clip_boundary(
         spec.loader.exec_module(mod)
 
         _log(f"Resolving clip boundary: {clip_str} (CRS={target_crs})", verbose)
-        gdf = mod.resolve_boundary(kind, name, state=state_arg, target_crs=target_crs)
+        result = mod.resolve_boundary(kind, name, state=state_arg, target_crs=target_crs)
+        geom = result["geometry"]
+        bbox = result["bounds"]
+        _log(f"  Boundary bbox in {target_crs}: {bbox}", verbose)
+        return geom, bbox
     else:
-        # File path
+        # File path — read with fiona, reproject with pyproj, union
         boundary_path = Path(clip_str)
         if not boundary_path.exists():
             raise FileNotFoundError(f"Clip boundary file not found: {boundary_path}")
         _log(f"Loading clip boundary from file: {boundary_path}", verbose)
-        gdf = gpd.read_file(boundary_path)
-        if gdf.crs is None:
-            gdf = gdf.set_crs("EPSG:4326")
-        gdf = gdf.to_crs(target_crs)
 
-    # Dissolve to a single geometry (union of all features)
-    geom = gdf.geometry.union_all()
-    xmin, ymin, xmax, ymax = gdf.total_bounds
+        geoms = []
+        with fiona.open(str(boundary_path)) as src:
+            src_crs = src.crs_wkt or "EPSG:4326"
+            for feat in src:
+                geoms.append(shapely_shape(feat["geometry"]))
 
-    # Round bbox appropriately for the CRS (cast to plain float for clean repr)
-    if gdf.crs.is_geographic:
-        bbox = (round(float(xmin), 4), round(float(ymin), 4), round(float(xmax), 4), round(float(ymax), 4))
-    else:
-        bbox = (round(float(xmin), 1), round(float(ymin), 1), round(float(xmax), 1), round(float(ymax), 1))
+        # Reproject if needed
+        if src_crs != target_crs:
+            transformer = pyproj.Transformer.from_crs(src_crs, target_crs, always_xy=True)
+            geoms = [shapely_transform(transformer.transform, g) for g in geoms]
 
-    _log(f"  Boundary bbox in {target_crs}: {bbox}", verbose)
-    return geom, bbox
+        geom = unary_union(geoms)
+        xmin, ymin, xmax, ymax = geom.bounds
+
+        # Round bbox appropriately for the CRS
+        is_geographic = pyproj.CRS(target_crs).is_geographic
+        if is_geographic:
+            bbox = (round(float(xmin), 4), round(float(ymin), 4), round(float(xmax), 4), round(float(ymax), 4))
+        else:
+            bbox = (round(float(xmin), 1), round(float(ymin), 1), round(float(xmax), 1), round(float(ymax), 1))
+
+        _log(f"  Boundary bbox in {target_crs}: {bbox}", verbose)
+        return geom, bbox
 
 
 def harmonize_raster(
@@ -1337,51 +1351,98 @@ def rasterize_vector_to_grid(
     burn_value: int = 1,
     verbose: bool = True,
 ) -> Path:
+    """Rasterize a vector file to the target grid using ogr2ogr + gdal_rasterize.
+
+    Uses GDAL CLI tools to avoid loading the entire vector into RAM.
+    Falls back to fiona + rasterio.features.rasterize if GDAL CLI is unavailable.
+    """
     _log(f"Rasterizing vector: {input_path.name}", verbose)
 
-    gdf = gpd.read_file(input_path)
-    if gdf.crs is None:
-        gdf = gdf.set_crs("EPSG:4326")
+    import tempfile
+    xmin, ymin, xmax, ymax = grid.extent
 
-    if str(gdf.crs) != grid.crs:
-        gdf = gdf.to_crs(grid.crs)
+    try:
+        from src._gdal_utils import ogr2ogr as _ogr2ogr, gdal_rasterize as _gdal_rasterize, write_geometry_to_geojson
 
-    # Clip to boundary polygon if available, otherwise use rectangular extent
-    if grid.clip_geometry is not None:
-        _log("  Clipping vector to boundary polygon", verbose)
-        gdf.geometry = gdf.geometry.make_valid()
-        gdf = gpd.clip(gdf, grid.clip_geometry)
-    else:
-        xmin, ymin, xmax, ymax = grid.extent
-        clip_geom = box(xmin, ymin, xmax, ymax)
-        gdf = gdf[gdf.intersects(clip_geom)].copy()
+        # Step 1: Reproject and clip with ogr2ogr (streams, no RAM)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clipped_path = Path(tmpdir) / "clipped.geojson"
+            ogr_kwargs = {"t_srs": grid.crs, "output_format": "GeoJSON"}
+            if grid.clip_geometry is not None:
+                _log("  Clipping vector to boundary polygon", verbose)
+                clip_file = Path(tmpdir) / "clip_boundary.geojson"
+                write_geometry_to_geojson(grid.clip_geometry, grid.crs, clip_file)
+                ogr_kwargs["clipsrc"] = str(clip_file)
+            else:
+                ogr_kwargs["spat"] = (xmin, ymin, xmax, ymax)
 
-    shapes = [(geom, burn_value) for geom in gdf.geometry if geom is not None and not geom.is_empty]
-    burned = rasterize(
-        shapes=shapes,
-        out_shape=(grid.height, grid.width),
-        transform=grid.transform,
-        fill=0,
-        all_touched=True,
-        dtype="uint8",
-    )
+            _ogr2ogr(input_path, clipped_path, **ogr_kwargs)
 
-    meta = {
-        "driver": "GTiff",
-        "height": grid.height,
-        "width": grid.width,
-        "count": 1,
-        "dtype": "uint8",
-        "crs": grid.crs,
-        "transform": grid.transform,
-        "nodata": 0,
-    }
+            # Step 2: Create an empty GeoTIFF, then burn vector into it
+            # gdal_rasterize needs the output file to already exist with -te/-ts
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            _gdal_rasterize(
+                clipped_path, output_path,
+                burn_value=burn_value,
+                te=(xmin, ymin, xmax, ymax),
+                ts=(grid.width, grid.height),
+                ot="Byte",
+                a_srs=grid.crs,
+                a_nodata=0,
+                all_touched=True,
+            )
+        return output_path
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with rasterio.open(output_path, "w", **meta) as dst:
-        dst.write(burned, 1)
+    except (ImportError, RuntimeError):
+        # Fallback: stream geometries with fiona + rasterize with rasterio
+        _log("  GDAL CLI not available, falling back to fiona + rasterio", verbose)
 
-    return output_path
+        shapes = []
+        transformer = None
+        with fiona.open(str(input_path)) as src:
+            src_crs = src.crs_wkt or "EPSG:4326"
+            if src_crs != grid.crs:
+                transformer = pyproj.Transformer.from_crs(src_crs, grid.crs, always_xy=True)
+
+            clip_geom = grid.clip_geometry if grid.clip_geometry is not None else box(xmin, ymin, xmax, ymax)
+
+            for feat in src:
+                geom = shapely_shape(feat["geometry"])
+                if geom is None or geom.is_empty:
+                    continue
+                if transformer is not None:
+                    geom = shapely_transform(transformer.transform, geom)
+                if geom.intersects(clip_geom):
+                    if grid.clip_geometry is not None:
+                        geom = geom.intersection(clip_geom)
+                    if not geom.is_empty:
+                        shapes.append((geom, burn_value))
+
+        burned = rasterize(
+            shapes=shapes,
+            out_shape=(grid.height, grid.width),
+            transform=grid.transform,
+            fill=0,
+            all_touched=True,
+            dtype="uint8",
+        )
+
+        meta = {
+            "driver": "GTiff",
+            "height": grid.height,
+            "width": grid.width,
+            "count": 1,
+            "dtype": "uint8",
+            "crs": grid.crs,
+            "transform": grid.transform,
+            "nodata": 0,
+        }
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with rasterio.open(output_path, "w", **meta) as dst:
+            dst.write(burned, 1)
+
+        return output_path
 
 
 def harmonize_vector(
@@ -1392,9 +1453,8 @@ def harmonize_vector(
 ) -> Path:
     """Harmonize vector to target CRS and clip to target extent or boundary.
 
-    When ``grid.clip_geometry`` is set, features are clipped to the actual
-    boundary polygon (e.g. a state outline) rather than just the rectangular
-    bounding box.
+    Uses ogr2ogr (GDAL CLI) for memory-efficient reprojection and clipping.
+    Falls back to fiona + shapely if GDAL CLI is unavailable.
 
     Args:
         input_path: Path to input vector file
@@ -1406,32 +1466,77 @@ def harmonize_vector(
         Path to harmonized vector file
     """
     _log(f"Harmonizing vector: {input_path.name}", verbose)
-
-    gdf = gpd.read_file(input_path)
-    if gdf.crs is None:
-        gdf = gdf.set_crs("EPSG:4326")
-
-    # Reproject to target CRS if needed
-    if str(gdf.crs) != grid.crs:
-        gdf = gdf.to_crs(grid.crs)
-
-    # Clip to boundary polygon if available, otherwise use rectangular extent
-    if grid.clip_geometry is not None:
-        _log("  Clipping vector to boundary polygon", verbose)
-        gdf.geometry = gdf.geometry.make_valid()
-        gdf = gpd.clip(gdf, grid.clip_geometry)
-    else:
-        xmin, ymin, xmax, ymax = grid.extent
-        clip_geom = box(xmin, ymin, xmax, ymax)
-        gdf = gdf[gdf.intersects(clip_geom)].copy()
-
-    # Save harmonized vector
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    gdf.to_file(output_path, driver="GeoJSON")
 
-    _log(f"  Saved harmonized vector: {output_path.name} ({len(gdf)} features)", verbose)
+    try:
+        from src._gdal_utils import ogr2ogr as _ogr2ogr, write_geometry_to_geojson
+        import tempfile
 
-    return output_path
+        ogr_kwargs = {"t_srs": grid.crs, "output_format": "GeoJSON"}
+        if grid.clip_geometry is not None:
+            _log("  Clipping vector to boundary polygon", verbose)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                clip_file = Path(tmpdir) / "clip_boundary.geojson"
+                write_geometry_to_geojson(grid.clip_geometry, grid.crs, clip_file)
+                ogr_kwargs["clipsrc"] = str(clip_file)
+                _ogr2ogr(input_path, output_path, **ogr_kwargs)
+        else:
+            xmin, ymin, xmax, ymax = grid.extent
+            ogr_kwargs["spat"] = (xmin, ymin, xmax, ymax)
+            _ogr2ogr(input_path, output_path, **ogr_kwargs)
+
+        # Count features for logging
+        try:
+            with fiona.open(str(output_path)) as src:
+                count = len(src)
+            _log(f"  Saved harmonized vector: {output_path.name} ({count} features)", verbose)
+        except Exception:
+            _log(f"  Saved harmonized vector: {output_path.name}", verbose)
+
+        return output_path
+
+    except (ImportError, RuntimeError):
+        # Fallback: stream with fiona + shapely
+        _log("  GDAL CLI not available, falling back to fiona + shapely", verbose)
+
+        transformer = None
+        features_out = []
+        with fiona.open(str(input_path)) as src:
+            src_crs = src.crs_wkt or "EPSG:4326"
+            src_schema = src.schema.copy()
+            if src_crs != grid.crs:
+                transformer = pyproj.Transformer.from_crs(src_crs, grid.crs, always_xy=True)
+
+            clip_geom = grid.clip_geometry if grid.clip_geometry is not None else box(*grid.extent)
+
+            for feat in src:
+                geom = shapely_shape(feat["geometry"])
+                if geom is None or geom.is_empty:
+                    continue
+                if transformer is not None:
+                    geom = shapely_transform(transformer.transform, geom)
+                if geom.intersects(clip_geom):
+                    if grid.clip_geometry is not None:
+                        geom = geom.intersection(clip_geom)
+                    if not geom.is_empty:
+                        feat_out = dict(feat)
+                        feat_out["geometry"] = shapely_mapping(geom)
+                        features_out.append(feat_out)
+
+        # Write output as GeoJSON
+        fc = {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "geometry": f["geometry"],
+                "properties": f.get("properties", {}),
+            } for f in features_out],
+        }
+        with open(output_path, "w") as fout:
+            json.dump(fc, fout)
+
+        _log(f"  Saved harmonized vector: {output_path.name} ({len(features_out)} features)", verbose)
+        return output_path
 
 
 def _create_binary_mask(data: np.ndarray) -> np.ndarray:
@@ -1448,6 +1553,53 @@ def _create_binary_mask(data: np.ndarray) -> np.ndarray:
 # the filenames are constructed internally so callers can't accidentally diverge.
 HARMONIZED_VIZ_PNG = "harmonized_visualization.png"
 HARMONIZED_VIZ_HTML = "harmonized_visualization.html"
+
+
+def _plot_vector_on_ax(path: Path, ax, *, facecolor='steelblue', edgecolor='black',
+                       linewidth=0.5, alpha=1.0, zorder=None):
+    """Plot a vector file on a matplotlib axes using fiona + shapely.
+
+    Streams features from the file without loading everything into RAM.
+    Returns (bounds, crs_string) for the layer.
+    """
+    from matplotlib.collections import PatchCollection
+    from matplotlib.patches import Polygon as MplPolygon
+
+    patches = []
+    plot_kwargs = {}
+    if zorder is not None:
+        plot_kwargs["zorder"] = zorder
+
+    with fiona.open(str(path)) as src:
+        bounds = src.bounds  # (xmin, ymin, xmax, ymax)
+        crs_str = src.crs_wkt if src.crs_wkt else None
+
+        for feat in src:
+            geom = shapely_shape(feat["geometry"])
+            for polygon in _iter_polygons(geom):
+                exterior_coords = np.array(polygon.exterior.coords)
+                patches.append(MplPolygon(exterior_coords, closed=True))
+
+    if patches:
+        pc = PatchCollection(patches, facecolor=facecolor, edgecolor=edgecolor,
+                             linewidth=linewidth, alpha=alpha, **plot_kwargs)
+        ax.add_collection(pc)
+        ax.set_xlim(bounds[0], bounds[2])
+        ax.set_ylim(bounds[1], bounds[3])
+
+    return bounds, crs_str
+
+
+def _iter_polygons(geom):
+    """Yield individual Polygon objects from any geometry type."""
+    if geom.geom_type == "Polygon":
+        yield geom
+    elif geom.geom_type == "MultiPolygon":
+        yield from geom.geoms
+    elif geom.geom_type == "GeometryCollection":
+        for g in geom.geoms:
+            if g.geom_type in ("Polygon", "MultiPolygon"):
+                yield from _iter_polygons(g)
 
 
 def create_visualization(
@@ -1576,9 +1728,9 @@ def _create_visualization_impl(
         # Handle vector files
         if path.suffix.lower() in ['.geojson', '.json', '.shp']:
             style = _get_vector_style(name)
-            gdf = gpd.read_file(path)
-            gdf.plot(ax=ax, color=style["color"], edgecolor='black',
-                    linewidth=0.5, alpha=style["fillOpacity"])
+            tb, vec_crs = _plot_vector_on_ax(
+                path, ax, facecolor=style["color"], edgecolor='black',
+                linewidth=0.5, alpha=style["fillOpacity"])
 
             # Legend for vector panel
             legend_patch = Patch(facecolor=style["color"], edgecolor='black',
@@ -1600,14 +1752,13 @@ def _create_visualization_impl(
             if _boundary is not None:
                 try:
                     _add_boundary_overlay(ax, _boundary, data_shape=None,
-                                          extent=gdf.total_bounds)
+                                          extent=tb)
                 except Exception:
                     pass
 
             # Scale bar + frame + letter
-            tb = gdf.total_bounds
             layer_bounds = (tb[0], tb[1], tb[2], tb[3])
-            crs_for_bar = _scale_crs or (gdf.crs.to_string() if gdf.crs else None)
+            crs_for_bar = _scale_crs or vec_crs
             if layer_bounds and crs_for_bar:
                 _add_scale_bar(ax, layer_bounds, crs_for_bar)
             _add_panel_frame(ax)
@@ -1734,9 +1885,9 @@ def _create_visualization_impl(
         label = _get_display_name(layer_name, metadata)
         if path.suffix.lower() in ['.geojson', '.json', '.shp']:
             style = _get_vector_style(layer_name)
-            gdf = gpd.read_file(path)
-            gdf.plot(ax=ax_composite, color=style["color"], edgecolor='black',
-                     linewidth=0.5, alpha=style["fillOpacity"], zorder=i + 2)
+            _plot_vector_on_ax(
+                path, ax_composite, facecolor=style["color"], edgecolor='black',
+                linewidth=0.5, alpha=style["fillOpacity"], zorder=i + 2)
             composite_legend_handles.append(
                 Patch(facecolor=style["color"], alpha=style["fillOpacity"], label=label)
             )
@@ -2247,35 +2398,36 @@ def _create_interactive_visualization_impl(
             # Get styling for this layer
             style = _get_vector_style(name)
 
-            # Read the GeoJSON
-            gdf = gpd.read_file(path)
-
-            # Convert datetime columns to strings to avoid JSON serialization issues
-            for col in gdf.columns:
-                if hasattr(gdf[col].dtype, 'kind') and gdf[col].dtype.kind == 'M':
-                    gdf[col] = gdf[col].astype(str)
-
-            # Auto-simplify large layers so they embed in HTML without crashing the browser.
-            # Tolerance is ~0.1% of the shorter bbox dimension (~100 m for a state-scale map).
+            # Read the GeoJSON as raw JSON (no geopandas — avoids loading into RAM)
             size_mb = path.stat().st_size / 1024 / 1024
+
+            # Auto-simplify large layers using ogr2ogr (memory-efficient)
             if size_mb > 50:
-                xmin, ymin, xmax, ymax = target_extent
-                tol = min(xmax - xmin, ymax - ymin) * 0.001
+                xmin_t, ymin_t, xmax_t, ymax_t = target_extent
+                tol = min(xmax_t - xmin_t, ymax_t - ymin_t) * 0.001
                 _log(
-                    f"  Large vector ({size_mb:.0f} MB) — simplifying geometry (this is the slowest step)...",
+                    f"  Large vector ({size_mb:.0f} MB) — simplifying with ogr2ogr...",
                     verbose,
                 )
-                gdf = gpd.GeoDataFrame(
-                    gdf.drop(columns=[c for c in gdf.columns if c != "geometry"], errors="ignore"),
-                    geometry=gdf.geometry.simplify(tol, preserve_topology=True),
-                    crs=gdf.crs,
-                )
-                # Snap to 0.0001° grid (~11 m) to further reduce JSON size
-                gdf = gdf.set_precision(0.0001)
-                simplified_mb = len(gdf.to_json()) / 1024 / 1024
-                _log(f"  Simplified to ~{simplified_mb:.0f} MB", verbose)
+                try:
+                    from src._gdal_utils import ogr2ogr as _ogr2ogr
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+                        _ogr2ogr(path, Path(tmp.name), simplify=tol)
+                        with open(tmp.name) as f:
+                            geojson_data = json.load(f)
+                        simplified_mb = Path(tmp.name).stat().st_size / 1024 / 1024
+                        _log(f"  Simplified to ~{simplified_mb:.0f} MB", verbose)
+                        Path(tmp.name).unlink(missing_ok=True)
+                except (ImportError, RuntimeError):
+                    # Fallback: read raw JSON without simplification
+                    with open(path) as f:
+                        geojson_data = json.load(f)
+            else:
+                with open(path) as f:
+                    geojson_data = json.load(f)
 
-            geojson_str = gdf.to_json()
+            geojson_str = json.dumps(geojson_data)
             geojson_layer = folium.GeoJson(
                 geojson_str,
                 name=_format_layer_name(name),

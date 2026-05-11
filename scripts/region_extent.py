@@ -14,11 +14,15 @@ Bounds come from authoritative Census TIGER 2025 data.
 Add ``--boundary <output.geojson>`` to write the actual polygon boundary to
 a GeoJSON file (for use with ``ExampleWorkflow(clip_boundary=...)``).
 
-**Programmatic usage** (returns a GeoDataFrame with the boundary polygon)::
+**Programmatic usage** (returns a dict with geometry, bounds, crs, attributes)::
 
     from scripts.region_extent import resolve_boundary
-    gdf = resolve_boundary("state", "Utah")
-    gdf = resolve_boundary("county", "Larimer", state="Colorado", target_crs="EPSG:32613")
+    result = resolve_boundary("state", "Utah")
+    result = resolve_boundary("county", "Larimer", state="Colorado", target_crs="EPSG:32613")
+    # result["geometry"]   → Shapely geometry in target_crs
+    # result["bounds"]     → (xmin, ymin, xmax, ymax) in target_crs
+    # result["crs"]        → target CRS string
+    # result["attributes"] → dict with NAME, STUSPS, STATEFP, etc.
 
 Examples:
     python scripts/region_extent.py state Colorado
@@ -44,11 +48,15 @@ guess.
 from __future__ import annotations
 
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
-import geopandas as gpd
+import fiona
+import pyproj
 import requests
+from shapely.geometry import shape as shapely_shape
+from shapely.ops import transform as shapely_transform, unary_union
 
 CACHE_DIR = Path.home() / ".cache" / "llm_lesson_exemplar" / "region_extent"
 
@@ -90,36 +98,58 @@ def _download_and_extract(url: str, dest_dir: Path) -> Path:
     return shp
 
 
-def _resolve_state(states: gpd.GeoDataFrame, ident: str) -> tuple[str, str, str]:
-    """Match a state by NAME, STUSPS, or 2-digit FIPS. Return (name, stusps, fips)."""
-    raw = ident.strip()
-    if raw.isdigit():
-        match = states[states["STATEFP"] == raw.zfill(2)]
-    else:
-        low = raw.lower()
-        match = states[
-            (states["NAME"].str.lower() == low) | (states["STUSPS"].str.lower() == low)
-        ]
-    if len(match) == 0:
-        sys.exit(f"No state matched: {ident!r}")
-    if len(match) > 1:
-        choices = ", ".join(match["NAME"].tolist())
-        sys.exit(f"Ambiguous state {ident!r}: {choices}")
-    row = match.iloc[0]
-    return row["NAME"], row["STUSPS"], row["STATEFP"]
+def _find_features(shp_path: Path, match_fn) -> list[dict]:
+    """Stream features from a shapefile and return those matching *match_fn*.
 
-
-def _bbox_in_crs(gdf: gpd.GeoDataFrame, target_crs: str) -> tuple[float, float, float, float]:
-    """Reproject the polygon(s) to target_crs, then take total_bounds.
-
-    Reprojecting the polygon (rather than reprojecting four bbox corners) is
-    important: a feature's bbox in EPSG:4326 reprojected corner-by-corner can
-    miss curvature and yield a too-tight envelope in projected CRSs.
+    Each returned dict has keys ``"geometry"`` (Shapely) and ``"properties"``.
+    Uses fiona for streaming — never loads the whole file into RAM.
     """
-    xmin, ymin, xmax, ymax = gdf.to_crs(target_crs).total_bounds
-    # Geographic CRSs are in degrees → 4 decimals (~11 m); projected CRSs are
-    # typically in meters → integer precision is sufficient for cropping.
-    if gpd.GeoSeries([], crs=target_crs).crs.is_geographic:
+    matches = []
+    with fiona.open(str(shp_path)) as src:
+        for feat in src:
+            props = feat["properties"]
+            if match_fn(props):
+                matches.append({
+                    "geometry": shapely_shape(feat["geometry"]),
+                    "properties": dict(props),
+                })
+    return matches
+
+
+def _resolve_state(shp_path: Path, ident: str) -> dict:
+    """Match a state by NAME, STUSPS, or 2-digit FIPS. Return feature dict."""
+    raw = ident.strip()
+    low = raw.lower()
+
+    def match(props):
+        if raw.isdigit():
+            return props.get("STATEFP") == raw.zfill(2)
+        return (
+            (props.get("NAME") or "").lower() == low
+            or (props.get("STUSPS") or "").lower() == low
+        )
+
+    matches = _find_features(shp_path, match)
+    if len(matches) == 0:
+        sys.exit(f"No state matched: {ident!r}")
+    if len(matches) > 1:
+        choices = ", ".join(m["properties"]["NAME"] for m in matches)
+        sys.exit(f"Ambiguous state {ident!r}: {choices}")
+    return matches[0]
+
+
+def _reproject_geometry(geom, src_crs: str, dst_crs: str):
+    """Reproject a Shapely geometry from src_crs to dst_crs using pyproj."""
+    if src_crs == dst_crs:
+        return geom
+    transformer = pyproj.Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    return shapely_transform(transformer.transform, geom)
+
+
+def _round_bbox(bbox, is_geographic: bool):
+    """Round bbox appropriately for the CRS."""
+    xmin, ymin, xmax, ymax = bbox
+    if is_geographic:
         return round(xmin, 4), round(ymin, 4), round(xmax, 4), round(ymax, 4)
     return round(xmin, 1), round(ymin, 1), round(xmax, 1), round(ymax, 1)
 
@@ -130,12 +160,11 @@ def resolve_boundary(
     *,
     state: str | None = None,
     target_crs: str = "EPSG:4326",
-) -> gpd.GeoDataFrame:
+) -> dict:
     """Return the actual boundary polygon for a US state, county, or place.
 
     This is the **programmatic API** for use inside Python scripts and the
-    harmonizer.  The returned GeoDataFrame is in *target_crs* and contains the
-    full polygon geometry (not just a bounding box).
+    harmonizer.
 
     Parameters
     ----------
@@ -150,50 +179,86 @@ def resolve_boundary(
 
     Returns
     -------
-    gpd.GeoDataFrame
-        Single-row GeoDataFrame with the boundary polygon in *target_crs*.
-
-    Raises
-    ------
-    SystemExit
-        If the feature cannot be found.
+    dict
+        Keys: ``geometry`` (Shapely geometry in *target_crs*),
+        ``bounds`` (xmin, ymin, xmax, ymax), ``crs`` (str),
+        ``attributes`` (dict with NAME, STUSPS, STATEFP, etc.).
     """
     kind = kind.lower()
-    states_gdf = gpd.read_file(_download_and_extract(STATES_URL, CACHE_DIR / "state"))
+    states_shp = _download_and_extract(STATES_URL, CACHE_DIR / "state")
+
+    # Determine the source CRS from the shapefile
+    with fiona.open(str(states_shp)) as src:
+        src_crs = src.crs_wkt
 
     if kind == "state":
-        _full, _stusps, fips = _resolve_state(states_gdf, name)
-        gdf = states_gdf[states_gdf["STATEFP"] == fips].copy()
+        feat = _resolve_state(states_shp, name)
+        geom = feat["geometry"]
+        attrs = feat["properties"]
+
     elif kind == "county":
         if state is None:
             sys.exit("county lookup requires a state argument")
-        _full, _, fips = _resolve_state(states_gdf, state)
-        counties = gpd.read_file(_download_and_extract(COUNTIES_URL, CACHE_DIR / "county"))
-        sub = counties[counties["STATEFP"] == fips]
-        gdf = sub[sub["NAME"].str.lower() == name.lower().strip()].copy()
-        if len(gdf) == 0:
-            choices = ", ".join(sorted(sub["NAME"].tolist()))
-            sys.exit(f"No county {name!r} in {_full}.\nAvailable: {choices}")
+        state_feat = _resolve_state(states_shp, state)
+        state_fips = state_feat["properties"]["STATEFP"]
+
+        counties_shp = _download_and_extract(COUNTIES_URL, CACHE_DIR / "county")
+        low_name = name.lower().strip()
+        matches = _find_features(
+            counties_shp,
+            lambda p: p.get("STATEFP") == state_fips and (p.get("NAME") or "").lower() == low_name,
+        )
+        if len(matches) == 0:
+            # List available counties for helpful error
+            all_counties = _find_features(
+                counties_shp, lambda p: p.get("STATEFP") == state_fips
+            )
+            choices = ", ".join(sorted(m["properties"]["NAME"] for m in all_counties))
+            sys.exit(f"No county {name!r} in {state_feat['properties']['NAME']}.\nAvailable: {choices}")
+        geom = matches[0]["geometry"]
+        attrs = matches[0]["properties"]
+
     elif kind == "place":
         if state is None:
             sys.exit("place lookup requires a state argument")
-        _full, _, fips = _resolve_state(states_gdf, state)
-        places_url = PLACE_URL_TEMPLATE.format(fips=fips)
-        places = gpd.read_file(_download_and_extract(places_url, CACHE_DIR / f"place_{fips}"))
-        gdf = places[places["NAME"].str.lower() == name.lower().strip()].copy()
-        if len(gdf) == 0:
+        state_feat = _resolve_state(states_shp, state)
+        state_fips = state_feat["properties"]["STATEFP"]
+
+        places_url = PLACE_URL_TEMPLATE.format(fips=state_fips)
+        places_shp = _download_and_extract(places_url, CACHE_DIR / f"place_{state_fips}")
+        low_name = name.lower().strip()
+        matches = _find_features(
+            places_shp,
+            lambda p: (p.get("NAME") or "").lower() == low_name,
+        )
+        if len(matches) == 0:
             sys.exit(
-                f"No place {name!r} in {_full}. "
+                f"No place {name!r} in {state_feat['properties']['NAME']}. "
                 f"Names are matched exactly (case-insensitive) against TIGER's NAME field; "
                 f"try a different spelling or a nearby city."
             )
-        if len(gdf) > 1:
-            kinds = gdf["NAMELSAD"].tolist()
-            sys.exit(f"Multiple matches for {name!r} in {_full}: {kinds}")
+        if len(matches) > 1:
+            kinds = [m["properties"].get("NAMELSAD", m["properties"]["NAME"]) for m in matches]
+            sys.exit(f"Multiple matches for {name!r} in {state_feat['properties']['NAME']}: {kinds}")
+        geom = matches[0]["geometry"]
+        attrs = matches[0]["properties"]
+
     else:
         sys.exit(f"Unknown kind {kind!r} — expected state, county, or place")
 
-    return gdf.to_crs(target_crs)
+    # Reproject geometry to target CRS
+    reprojected = _reproject_geometry(geom, src_crs, target_crs)
+
+    # Compute bounds
+    is_geographic = pyproj.CRS(target_crs).is_geographic
+    bbox = _round_bbox(reprojected.bounds, is_geographic)
+
+    return {
+        "geometry": reprojected,
+        "bounds": bbox,
+        "crs": target_crs,
+        "attributes": attrs,
+    }
 
 
 def _emit(
@@ -213,39 +278,55 @@ def _emit(
         print(f'  clip_boundary="{boundary_path}",  # actual boundary polygon')
 
 
+def _write_boundary(result: dict, boundary_path: str) -> None:
+    """Write the boundary geometry to a GeoJSON file using ogr-free JSON."""
+    import json
+    from shapely.geometry import mapping
+    fc = {
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "geometry": mapping(result["geometry"]),
+            "properties": result["attributes"],
+        }],
+    }
+    Path(boundary_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(boundary_path, "w") as f:
+        json.dump(fc, f)
+    print(f"Boundary written to {boundary_path}", file=sys.stderr)
+
+
 def cmd_state(name: str, target_crs: str, boundary_path: str | None = None) -> int:
-    gdf = resolve_boundary("state", name, target_crs=target_crs)
-    row = gdf.iloc[0]
-    full, stusps, fips = row["NAME"], row["STUSPS"], row["STATEFP"]
-    bbox = _bbox_in_crs(gdf, target_crs)
+    result = resolve_boundary("state", name, target_crs=target_crs)
+    attrs = result["attributes"]
+    full, stusps, fips = attrs["NAME"], attrs["STUSPS"], attrs["STATEFP"]
     if boundary_path:
-        gdf.to_file(boundary_path, driver="GeoJSON")
-        print(f"Boundary written to {boundary_path}", file=sys.stderr)
-    _emit(f"{full} ({stusps}, FIPS {fips})", bbox, target_crs, boundary_path)
+        _write_boundary(result, boundary_path)
+    _emit(f"{full} ({stusps}, FIPS {fips})", result["bounds"], target_crs, boundary_path)
     return 0
 
 
 def cmd_county(county_name: str, state_ident: str, target_crs: str, boundary_path: str | None = None) -> int:
-    gdf = resolve_boundary("county", county_name, state=state_ident, target_crs=target_crs)
-    states_gdf = gpd.read_file(_download_and_extract(STATES_URL, CACHE_DIR / "state"))
-    state_full, _, _ = _resolve_state(states_gdf, state_ident)
-    bbox = _bbox_in_crs(gdf, target_crs)
+    result = resolve_boundary("county", county_name, state=state_ident, target_crs=target_crs)
+    # Get state full name
+    states_shp = _download_and_extract(STATES_URL, CACHE_DIR / "state")
+    state_feat = _resolve_state(states_shp, state_ident)
+    state_full = state_feat["properties"]["NAME"]
     if boundary_path:
-        gdf.to_file(boundary_path, driver="GeoJSON")
-        print(f"Boundary written to {boundary_path}", file=sys.stderr)
-    _emit(f"{gdf.iloc[0]['NAME']} County, {state_full}", bbox, target_crs, boundary_path)
+        _write_boundary(result, boundary_path)
+    _emit(f"{result['attributes']['NAME']} County, {state_full}", result["bounds"], target_crs, boundary_path)
     return 0
 
 
 def cmd_place(place_name: str, state_ident: str, target_crs: str, boundary_path: str | None = None) -> int:
-    gdf = resolve_boundary("place", place_name, state=state_ident, target_crs=target_crs)
-    states_gdf = gpd.read_file(_download_and_extract(STATES_URL, CACHE_DIR / "state"))
-    state_full, _, _ = _resolve_state(states_gdf, state_ident)
-    bbox = _bbox_in_crs(gdf, target_crs)
+    result = resolve_boundary("place", place_name, state=state_ident, target_crs=target_crs)
+    states_shp = _download_and_extract(STATES_URL, CACHE_DIR / "state")
+    state_feat = _resolve_state(states_shp, state_ident)
+    state_full = state_feat["properties"]["NAME"]
     if boundary_path:
-        gdf.to_file(boundary_path, driver="GeoJSON")
-        print(f"Boundary written to {boundary_path}", file=sys.stderr)
-    _emit(f"{gdf.iloc[0]['NAMELSAD']}, {state_full}", bbox, target_crs, boundary_path)
+        _write_boundary(result, boundary_path)
+    label = result["attributes"].get("NAMELSAD", result["attributes"]["NAME"])
+    _emit(f"{label}, {state_full}", result["bounds"], target_crs, boundary_path)
     return 0
 
 
