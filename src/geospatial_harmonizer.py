@@ -1848,59 +1848,42 @@ def _create_visualization_impl(
             is_categorical = len(unique_vals) > 20
             masked_data = np.ma.masked_equal(data, 0)
 
-            if is_categorical and "fbfm" in name.lower():
+            if "color_map" in style and style["color_map"]:
+                # Categorical data with a discovered color map (e.g. from labels CSV)
                 import src.geospatial_harmonizer as _self
                 labels_map = _self.DISCOVERED_LABELS or {}
                 all_cats = sorted([int(v) for v in unique_vals.tolist()])
-                if "color_map" in style and style["color_map"]:
-                    color_map = style["color_map"]
-                    colors = [(color_map[c][0]/255, color_map[c][1]/255, color_map[c][2]/255)
-                              if c in color_map else (0.7, 0.7, 0.7)
-                              for c in all_cats]
-                    cmap = ListedColormap(colors)
-                    color_bounds = [c - 0.5 for c in all_cats] + [all_cats[-1] + 0.5]
-                    norm = BoundaryNorm(color_bounds, cmap.N)
-                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"],
-                                   extent=raster_extent, aspect='equal')
-                    named_cats = [c for c in all_cats if labels_map.get(c, str(c)) != str(c) and c in color_map]
+                color_map = style["color_map"]
+                colors = [(color_map[c][0]/255, color_map[c][1]/255, color_map[c][2]/255)
+                          if c in color_map else (0.7, 0.7, 0.7)
+                          for c in all_cats]
+                cmap = ListedColormap(colors)
+                color_bounds = [c - 0.5 for c in all_cats] + [all_cats[-1] + 0.5]
+                norm = BoundaryNorm(color_bounds, cmap.N)
+                im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"],
+                               extent=raster_extent, aspect='equal')
+                named_cats = [c for c in all_cats if labels_map.get(c, str(c)) != str(c) and c in color_map]
+                if named_cats:
                     legend_handles = [
                         Patch(facecolor=(color_map[c][0]/255, color_map[c][1]/255, color_map[c][2]/255),
                               label=labels_map[c])
                         for c in named_cats
                     ]
-                else:
-                    n_colors = len(all_cats)
-                    cmap = cm.get_cmap("nipy_spectral", n_colors)
-                    color_bounds = [c - 0.5 for c in all_cats] + [all_cats[-1] + 0.5]
-                    norm = BoundaryNorm(color_bounds, cmap.N)
-                    im = ax.imshow(masked_data, cmap=cmap, norm=norm, alpha=style["alpha"],
-                                   extent=raster_extent, aspect='equal')
-                    named_cats = [c for c in all_cats if labels_map.get(c, str(c)) != str(c)]
-                    legend_handles = [
-                        Patch(facecolor=cmap(norm(c)), label=labels_map[c])
-                        for c in named_cats
-                    ]
-                ax.legend(
-                    handles=legend_handles,
-                    loc='upper left', bbox_to_anchor=(1.01, 1), borderaxespad=0,
-                    fontsize=10, ncol=2, frameon=True, edgecolor='#cccccc',
-                    title='Fuel Model', title_fontsize=10,
-                    handlelength=1, handleheight=1, handletextpad=0.4, columnspacing=0.5,
-                )
+                    ax.legend(
+                        handles=legend_handles,
+                        loc='upper left', bbox_to_anchor=(1.01, 1), borderaxespad=0,
+                        fontsize=10, ncol=2, frameon=True, edgecolor='#cccccc',
+                        title=display, title_fontsize=10,
+                        handlelength=1, handleheight=1, handletextpad=0.4, columnspacing=0.5,
+                    )
             else:
+                # Continuous data — colorbar shows actual values
                 cmap = cm.get_cmap(style["colormap"])
                 masked_data = np.ma.masked_equal(data, 0)
                 im = ax.imshow(masked_data, cmap=cmap, vmin=vmin, vmax=vmax, alpha=style["alpha"],
                                extent=raster_extent, aspect='equal')
                 cb = plt.colorbar(im, ax=ax, shrink=0.6, aspect=20)
-                units = style.get("units", "")
-                if units:
-                    cb.set_label(units, fontsize=10)
-                # High/Low labels on colorbar
-                cb.ax.text(0.5, 1.02, "High", transform=cb.ax.transAxes,
-                           ha='center', va='bottom', fontsize=10, fontweight='bold')
-                cb.ax.text(0.5, -0.02, "Low", transform=cb.ax.transAxes,
-                           ha='center', va='top', fontsize=10, fontweight='bold')
+                cb.set_label(display, fontsize=10)
 
         # Boundary overlay — now in geo-coordinates (same space as imshow extent)
         if _boundary is not None:
@@ -2096,122 +2079,64 @@ def _is_binary_data(data: np.ndarray) -> bool:
 
 
 def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
-    """Get color scheme and styling for a layer based on its name and data type.
-    
+    """Get color scheme and styling for a layer based on its data.
+
+    No hardcoded name matching — styling is determined purely by the data
+    values and the dataset index (for color variety).
+
     Returns a dict with:
     - colormap: matplotlib colormap name
-    - solid_color: RGB tuple for binary data (0-1 range)
+    - solid_color: RGBA tuple for binary data (0-1 range), or None
     - alpha: transparency
     - vmin, vmax: for colormap normalization
     """
-    name_lower = name.lower()
     is_binary = _is_binary_data(data)
-    
-    # Define distinct color schemes for different dataset types
+
+    # Cycle through visually distinct colors/colormaps by index
+    _SOLID_COLORS = [
+        (1.0, 0.0, 0.0, 1.0),   # Red
+        (0.4, 0.2, 0.8, 1.0),   # Purple
+        (0.0, 0.6, 0.3, 1.0),   # Green
+        (1.0, 0.5, 0.0, 1.0),   # Orange
+        (0.0, 0.4, 0.8, 1.0),   # Blue
+    ]
+    _COLORMAPS = ["viridis", "plasma", "cividis", "inferno", "magma", "YlGnBu"]
+
     if is_binary:
-        # Binary data - use solid colors
-        if "burn" in name_lower or "mtbs" in name_lower or "fire" in name_lower:
-            # Burned areas - use red
-            return {
-                "colormap": None,
-                "solid_color": (1.0, 0.0, 0.0, 1.0),  # Red
-                "alpha": 0.8,
-                "vmin": None,
-                "vmax": None,
-            }
-        elif "building" in name_lower or "footprint" in name_lower:
-            # Buildings - use purple/blue
-            return {
-                "colormap": None,
-                "solid_color": (0.4, 0.2, 0.8, 1.0),  # Purple
-                "alpha": 0.8,
-                "vmin": None,
-                "vmax": None,
-            }
-        else:
-            # Default binary - use red
-            return {
-                "colormap": None,
-                "solid_color": (1.0, 0.0, 0.0, 1.0),  # Red
-                "alpha": 0.8,
-                "vmin": None,
-                "vmax": None,
-            }
-    else:
-        # Continuous/categorical data - use distinct colormaps
-        if "fbfm" in name_lower or "fuel" in name_lower:
-            # Fuel models - check if we have a discovered color map from source
-            if DISCOVERED_COLOR_MAP:
-                return {
-                    "colormap": None,  # Will use custom color map
-                    "color_map": DISCOVERED_COLOR_MAP,
-                    "solid_color": None,
-                    "alpha": 0.7,
-                    "vmin": min(DISCOVERED_COLOR_MAP.keys()),
-                    "vmax": max(DISCOVERED_COLOR_MAP.keys()),
-                }
-            else:
-                # Fallback to default colormap
-                return {
-                    "colormap": "nipy_spectral",  # Good for many categories
-                    "color_map": None,
-                    "solid_color": None,
-                    "alpha": 0.7,
-                "vmin": np.nanmin(data),
-                "vmax": np.nanmax(data),
-            }
-        elif "elevation" in name_lower or "dem" in name_lower:
-            return {
-                "colormap": "terrain",
-                "solid_color": None,
-                "alpha": 0.7,
-                "vmin": np.nanmin(data),
-                "vmax": np.nanmax(data),
-                "units": "m",
-            }
-        elif (
-            "pr" in name_lower.split("_")
-            or "precip" in name_lower
-            or "precipitation" in name_lower
-            or name_lower.startswith("pr_")
-            or "_pr_" in name_lower
-        ):
-            # Precipitation — Blues colormap, units in mm day⁻¹
-            return {
-                "colormap": "Blues",
-                "solid_color": None,
-                "alpha": 0.8,
-                "vmin": np.nanmin(data[data > 0]) if np.any(data > 0) else 0,
-                "vmax": np.nanmax(data),
-                "units": "mm day\u207b\u00b9",
-            }
-        elif "vpd" in name_lower or "vapor" in name_lower:
-            return {
-                "colormap": "plasma",
-                "solid_color": None,
-                "alpha": 0.7,
-                "vmin": np.nanmin(data),
-                "vmax": np.nanmax(data),
-                "units": "kPa",
-            }
-        elif "temp" in name_lower or "tasmax" in name_lower or "tasmin" in name_lower:
-            return {
-                "colormap": "RdYlBu_r",
-                "solid_color": None,
-                "alpha": 0.7,
-                "vmin": np.nanmin(data),
-                "vmax": np.nanmax(data),
-                "units": "°C",
-            }
-        else:
-            # Default continuous - use viridis
-            return {
-                "colormap": "viridis",
-                "solid_color": None,
-                "alpha": 0.7,
-                "vmin": np.nanmin(data),
-                "vmax": np.nanmax(data),
-            }
+        color = _SOLID_COLORS[index % len(_SOLID_COLORS)]
+        return {
+            "colormap": None,
+            "solid_color": color,
+            "alpha": 0.8,
+            "vmin": None,
+            "vmax": None,
+        }
+
+    # If we have a discovered color map (e.g. from a labels CSV), use it
+    if DISCOVERED_COLOR_MAP:
+        return {
+            "colormap": None,
+            "color_map": DISCOVERED_COLOR_MAP,
+            "solid_color": None,
+            "alpha": 0.7,
+            "vmin": min(DISCOVERED_COLOR_MAP.keys()),
+            "vmax": max(DISCOVERED_COLOR_MAP.keys()),
+        }
+
+    # Continuous or categorical — pick colormap by index
+    cmap_name = _COLORMAPS[index % len(_COLORMAPS)]
+    valid = data[~np.isnan(data)] if np.issubdtype(data.dtype, np.floating) else data
+    valid = valid[valid != 0] if valid.size > 0 else valid
+    vmin = float(np.nanmin(valid)) if valid.size > 0 else 0
+    vmax = float(np.nanmax(valid)) if valid.size > 0 else 1
+
+    return {
+        "colormap": cmap_name,
+        "solid_color": None,
+        "alpha": 0.7,
+        "vmin": vmin,
+        "vmax": vmax,
+    }
 
 
 def _get_vector_style(name: str) -> dict:
@@ -2500,14 +2425,15 @@ def _create_interactive_visualization_impl(
                 try:
                     from src._gdal_utils import ogr2ogr as _ogr2ogr
                     import tempfile as _tmpmod
-                    with _tmpmod.NamedTemporaryFile(suffix=".geojson", delete=False) as _tmp:
-                        _ogr2ogr(path, Path(_tmp.name), t_srs="EPSG:4326")
-                        with open(_tmp.name) as f:
-                            geojson_data = json.load(f)
-                        Path(_tmp.name).unlink(missing_ok=True)
+                    tmp_path = Path(_tmpmod.mkdtemp()) / "reprojected.geojson"
+                    _ogr2ogr(path, tmp_path, t_srs="EPSG:4326")
+                    with open(tmp_path) as f:
+                        geojson_data = json.load(f)
+                    tmp_path.unlink(missing_ok=True)
+                    tmp_path.parent.rmdir()
                     _log("  Reprojected vector to EPSG:4326 for interactive map", verbose)
-                except (ImportError, RuntimeError):
-                    pass  # Best effort — if ogr2ogr unavailable, use as-is
+                except Exception as _e:
+                    _log(f"  Could not reproject vector for interactive map: {_e}", verbose)
 
             geojson_str = json.dumps(geojson_data)
             geojson_layer = folium.GeoJson(
@@ -2556,9 +2482,9 @@ def _create_interactive_visualization_impl(
                     unique_vals = np.unique(data[data > 0])
                     is_categorical = len(unique_vals) > 20
 
-                    if is_categorical and "fbfm" in name.lower() and style.get("color_map"):
+                    if style.get("color_map"):
                         color_map = style["color_map"]
-                        # Paint all non-zero pixels light grey first (catches unlabeled artifact codes)
+                        # Paint all non-zero pixels light grey first (catches unlabeled codes)
                         artifact_px = (data > 0) & ~np.isin(data, list(color_map.keys()))
                         rgba[artifact_px, 0] = 180
                         rgba[artifact_px, 1] = 180
@@ -2572,15 +2498,8 @@ def _create_interactive_visualization_impl(
                             rgba[px, 2] = color[2]
                             rgba[px, 3] = alpha_val
                     else:
-                        if is_categorical and "fbfm" in name.lower():
-                            n_colors = len(unique_vals)
-                            cmap = cm.get_cmap("nipy_spectral", n_colors)
-                            norm = BoundaryNorm(
-                                np.linspace(vmin - 0.5, vmax + 0.5, n_colors + 1), n_colors
-                            )
-                        else:
-                            cmap = cm.get_cmap(style["colormap"])
-                            norm = Normalize(vmin=vmin, vmax=vmax)
+                        cmap = cm.get_cmap(style["colormap"])
+                        norm = Normalize(vmin=vmin, vmax=vmax)
 
                         valid = data > 0
                         normed = norm(data[valid].astype(float))

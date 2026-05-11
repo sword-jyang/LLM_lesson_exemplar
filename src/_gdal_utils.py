@@ -82,9 +82,19 @@ def ogr2ogr(
     if extra_args:
         cmd += extra_args
 
+    # ogr2ogr fails if the output file already exists — remove it first
+    if out.exists():
+        out.unlink()
+
     cmd += [str(out), str(input_path)]
 
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"ogr2ogr failed (exit {result.returncode}):\n"
+            f"  cmd: {' '.join(cmd)}\n"
+            f"  stderr: {result.stderr.strip()}"
+        )
     return out
 
 
@@ -174,7 +184,13 @@ def gdal_rasterize(
 
     cmd += [str(input_path), str(out)]
 
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"gdal_rasterize failed (exit {result.returncode}):\n"
+            f"  cmd: {' '.join(cmd)}\n"
+            f"  stderr: {result.stderr.strip()}"
+        )
     return out
 
 
