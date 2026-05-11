@@ -1560,7 +1560,8 @@ def _plot_vector_on_ax(path: Path, ax, *, facecolor='steelblue', edgecolor='blac
     """Plot a vector file on a matplotlib axes using fiona + shapely.
 
     Streams features from the file without loading everything into RAM.
-    Returns (bounds, crs_string) for the layer.
+    Returns (bounds, crs_string) for the layer.  Returns ``(None, None)``
+    for empty vector files (zero features).
     """
     from matplotlib.collections import PatchCollection
     from matplotlib.patches import Polygon as MplPolygon
@@ -1570,9 +1571,16 @@ def _plot_vector_on_ax(path: Path, ax, *, facecolor='steelblue', edgecolor='blac
     if zorder is not None:
         plot_kwargs["zorder"] = zorder
 
+    bounds = None
+    crs_str = None
+
     with fiona.open(str(path)) as src:
-        bounds = src.bounds  # (xmin, ymin, xmax, ymax)
         crs_str = src.crs_wkt if src.crs_wkt else None
+        try:
+            bounds = src.bounds  # (xmin, ymin, xmax, ymax)
+        except Exception:
+            # Empty file — fiona cannot compute bounds
+            pass
 
         for feat in src:
             geom = shapely_shape(feat["geometry"])
@@ -1580,7 +1588,7 @@ def _plot_vector_on_ax(path: Path, ax, *, facecolor='steelblue', edgecolor='blac
                 exterior_coords = np.array(polygon.exterior.coords)
                 patches.append(MplPolygon(exterior_coords, closed=True))
 
-    if patches:
+    if patches and bounds is not None:
         pc = PatchCollection(patches, facecolor=facecolor, edgecolor=edgecolor,
                              linewidth=linewidth, alpha=alpha, **plot_kwargs)
         ax.add_collection(pc)
@@ -1749,7 +1757,7 @@ def _create_visualization_impl(
             ax.axis("off")
 
             # Boundary overlay
-            if _boundary is not None:
+            if _boundary is not None and tb is not None:
                 try:
                     _add_boundary_overlay(ax, _boundary, data_shape=None,
                                           extent=tb)
@@ -1757,7 +1765,8 @@ def _create_visualization_impl(
                     pass
 
             # Scale bar + frame + letter
-            layer_bounds = (tb[0], tb[1], tb[2], tb[3])
+            if tb is not None:
+                layer_bounds = (tb[0], tb[1], tb[2], tb[3])
             crs_for_bar = _scale_crs or vec_crs
             if layer_bounds and crs_for_bar:
                 _add_scale_bar(ax, layer_bounds, crs_for_bar)
@@ -2324,18 +2333,21 @@ def create_interactive_visualization(
     outputs: list[tuple[str, Path]],
     target_extent: tuple[float, float, float, float],
     output_dir: Path | None = None,
-    verbose: bool = True
+    verbose: bool = True,
+    target_crs: str = "EPSG:4326",
 ) -> folium.Map | None:
     """Create an interactive folium map visualization.
 
     Args:
         outputs: List of (name, path) tuples for each harmonized layer
-        target_extent: Bounding box (xmin, xmax, ymin, ymax) for the map view
+        target_extent: Bounding box (xmin, ymin, xmax, ymax) for the map view
         output_dir: Optional directory in which to save the HTML map. If
             provided, the map is written to ``<output_dir>/harmonized_visualization.html``
             (filename is hardcoded — see HARMONIZED_VIZ_HTML). If None, the
             map is returned for inline display (e.g. in a Jupyter notebook).
         verbose: Print progress messages
+        target_crs: CRS of target_extent. Folium needs EPSG:4326 coordinates;
+            if this is a projected CRS the extent is reprojected automatically.
 
     Returns:
         folium.Map object, or None if creation failed
@@ -2343,6 +2355,14 @@ def create_interactive_visualization(
     if not FOLIUM_AVAILABLE:
         _log("Folium not available, skipping interactive visualization", verbose)
         return None
+
+    # Folium requires EPSG:4326 (lat/lon). Reproject extent if needed.
+    if target_crs and target_crs.upper() != "EPSG:4326":
+        from rasterio.warp import transform_bounds
+        xmin, ymin, xmax, ymax = target_extent
+        xmin, ymin, xmax, ymax = transform_bounds(target_crs, "EPSG:4326", xmin, ymin, xmax, ymax)
+        target_extent = (xmin, ymin, xmax, ymax)
+        _log(f"  Reprojected extent to EPSG:4326 for interactive map: {target_extent}", verbose)
 
     output_path = (output_dir / HARMONIZED_VIZ_HTML) if output_dir is not None else None
     try:
@@ -3085,6 +3105,7 @@ def _run_harmonization_inner(workflow: ExampleWorkflow, _wall_start: float) -> t
             workflow.target_extent,
             output_dir=workflow.output_dir,
             verbose=workflow.verbose,
+            target_crs=workflow.target_crs,
         )
 
     _elapsed = _time.time() - _wall_start

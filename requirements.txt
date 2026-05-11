@@ -16,7 +16,7 @@ branca>=0.6
 duckdb>=1.0
 
 # System dependency (not a pip package):
-#   apt install gdal-bin
+#   apt install gdal-bin   (>= 3.8, ships with Ubuntu 24.04)
 # Provides: ogr2ogr, ogrinfo, gdalwarp, gdal_rasterize, gdal_translate
 
 # Configuration support for examples
