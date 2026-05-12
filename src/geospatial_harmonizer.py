@@ -147,7 +147,7 @@ class ExampleWorkflow:
     name: str
     datasets: list[DatasetSpec]
     target_crs: str
-    target_extent: BBox
+    target_extent: BBox | None
     target_resolution: float
     output_dir: Path
     create_visualization: bool = True
@@ -2845,12 +2845,6 @@ def _run_harmonization_inner(workflow: ExampleWorkflow, _wall_start: float) -> t
             f"For geographic CRS (EPSG:4326) use degrees (e.g. 0.00243), "
             f"for projected CRS use meters (e.g. 270)."
         )
-    xmin, ymin, xmax, ymax = workflow.target_extent
-    if xmin >= xmax or ymin >= ymax:
-        raise ValueError(
-            f"target_extent is invalid: ({xmin}, {ymin}, {xmax}, {ymax}). "
-            f"Must be (xmin, ymin, xmax, ymax) where xmin < xmax and ymin < ymax."
-        )
     from rasterio.crs import CRS as _CRS_check
     try:
         _CRS_check.from_user_input(workflow.target_crs)
@@ -2878,13 +2872,24 @@ def _run_harmonization_inner(workflow: ExampleWorkflow, _wall_start: float) -> t
             workflow.target_crs,
             verbose=workflow.verbose,
         )
-        # If target_extent wasn't explicitly set (all zeros or a sentinel),
-        # auto-compute from the boundary bbox.  In practice, users who set
-        # clip_boundary should also set target_extent to the boundary's bbox
-        # (region_extent.py prints both), but this is a safety net.
-        if workflow.target_extent == (0, 0, 0, 0):
+        # If target_extent wasn't explicitly set, auto-compute from the
+        # boundary bbox.  Handles None, (0,0,0,0), or any missing extent.
+        if workflow.target_extent is None or workflow.target_extent == (0, 0, 0, 0):
             workflow.target_extent = boundary_bbox
             _log(f"Auto-computed target_extent from boundary: {boundary_bbox}", workflow.verbose)
+
+    # Validate extent (after boundary resolution so auto-computed extents are checked too)
+    if workflow.target_extent is None:
+        raise ValueError(
+            "target_extent is required. Either set it explicitly or provide "
+            "clip_boundary to auto-compute it from a boundary polygon."
+        )
+    xmin, ymin, xmax, ymax = workflow.target_extent
+    if xmin >= xmax or ymin >= ymax:
+        raise ValueError(
+            f"target_extent is invalid: ({xmin}, {ymin}, {xmax}, {ymax}). "
+            f"Must be (xmin, ymin, xmax, ymax) where xmin < xmax and ymin < ymax."
+        )
 
     grid = build_grid_spec(
         target_crs=workflow.target_crs,
