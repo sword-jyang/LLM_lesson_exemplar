@@ -11,6 +11,12 @@
     - Aashish Mukund (ESIIL)
     - Tyson Swetnam (CyVerse)
 
+    Testing and feedback:
+
+    - Matt Bitters
+    - Bridger Huhn
+    - Danielle Losos
+
 ## Agentic Repositories for Environmental Data Science
 
 Environmental data science has never been limited by ideas. It has been limited by translation. We move from questions to code, from code to workflows, from workflows to results, and at each step something is lost: time, clarity, reproducibility, or access.
