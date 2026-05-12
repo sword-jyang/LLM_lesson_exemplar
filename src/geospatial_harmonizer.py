@@ -1668,8 +1668,10 @@ def create_visualization(
         return None
 
 
-def _load_color_map_from_output_dir(output_path: Path) -> None:
+def _load_color_map_from_output_dir(output_path: Path | None) -> None:
     """Load DISCOVERED_COLOR_MAP and DISCOVERED_LABELS from saved JSON files if not already set."""
+    if output_path is None:
+        return
     import json
     import src.geospatial_harmonizer as _self
     if _self.DISCOVERED_COLOR_MAP is None:
@@ -1684,6 +1686,21 @@ def _load_color_map_from_output_dir(output_path: Path) -> None:
                 labels_json = json.load(f)
             _self.DISCOVERED_LABELS = {int(k): v for k, v in labels_json.items()}
             break
+
+
+def _load_color_map_for_dataset(output_dir: Path | None, dataset_name: str) -> dict | None:
+    """Load the color map JSON for a specific dataset, if it exists.
+
+    Returns a {int: (r,g,b)} dict, or None if no matching file is found.
+    """
+    if output_dir is None:
+        return None
+    color_map_path = output_dir / f"{dataset_name}_color_map.json"
+    if color_map_path.exists():
+        with open(color_map_path) as f:
+            color_map_json = json.load(f)
+        return {int(k): tuple(v) for k, v in color_map_json.items()}
+    return None
 
 
 def _create_visualization_impl(
@@ -1823,7 +1840,8 @@ def _create_visualization_impl(
         # imshow extent in [left, right, bottom, top] — renders in geo-coordinates
         raster_extent = [bnds.left, bnds.right, bnds.bottom, bnds.top]
 
-        style = _get_layer_style(name, data, i)
+        style = _get_layer_style(name, data, i,
+                                color_map_override=_load_color_map_for_dataset(output_path.parent, name))
 
         if style["solid_color"] is not None:
             rgba_image = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.float32)
@@ -1927,7 +1945,8 @@ def _create_visualization_impl(
                 bnds = src.bounds
                 img_extent = [bnds.left, bnds.right, bnds.bottom, bnds.top]
 
-            style = _get_layer_style(layer_name, data, i)
+            style = _get_layer_style(layer_name, data, i,
+                                    color_map_override=_load_color_map_for_dataset(output_path.parent, layer_name))
 
             if style["solid_color"] is not None:
                 r, g, b, a = style["solid_color"]
@@ -2078,11 +2097,19 @@ def _is_binary_data(data: np.ndarray) -> bool:
     return False
 
 
-def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
+def _get_layer_style(name: str, data: np.ndarray, index: int, *,
+                     color_map_override: dict | None = None) -> dict:
     """Get color scheme and styling for a layer based on its data.
 
     No hardcoded name matching — styling is determined purely by the data
     values and the dataset index (for color variety).
+
+    Parameters
+    ----------
+    color_map_override : dict, optional
+        Per-dataset color map ({int: (r,g,b)}). When provided, this is used
+        instead of the global DISCOVERED_COLOR_MAP, preventing color bleed
+        between datasets.
 
     Returns a dict with:
     - colormap: matplotlib colormap name
@@ -2112,15 +2139,16 @@ def _get_layer_style(name: str, data: np.ndarray, index: int) -> dict:
             "vmax": None,
         }
 
-    # If we have a discovered color map (e.g. from a labels CSV), use it
-    if DISCOVERED_COLOR_MAP:
+    # Use per-dataset color map if provided, otherwise fall back to global
+    _effective_color_map = color_map_override if color_map_override is not None else DISCOVERED_COLOR_MAP
+    if _effective_color_map:
         return {
             "colormap": None,
-            "color_map": DISCOVERED_COLOR_MAP,
+            "color_map": _effective_color_map,
             "solid_color": None,
             "alpha": 0.7,
-            "vmin": min(DISCOVERED_COLOR_MAP.keys()),
-            "vmax": max(DISCOVERED_COLOR_MAP.keys()),
+            "vmin": min(_effective_color_map.keys()),
+            "vmax": max(_effective_color_map.keys()),
         }
 
     # Continuous or categorical — pick colormap by index
@@ -2298,6 +2326,8 @@ def create_interactive_visualization(
     output_dir: Path | None = None,
     verbose: bool = True,
     target_crs: str = "EPSG:4326",
+    *,
+    metadata: VizMetadata | None = None,
 ) -> folium.Map | None:
     """Create an interactive folium map visualization.
 
@@ -2311,6 +2341,7 @@ def create_interactive_visualization(
         verbose: Print progress messages
         target_crs: CRS of target_extent. Folium needs EPSG:4326 coordinates;
             if this is a projected CRS the extent is reprojected automatically.
+        metadata: Optional VizMetadata for richer display names and descriptions.
 
     Returns:
         folium.Map object, or None if creation failed
@@ -2329,7 +2360,8 @@ def create_interactive_visualization(
 
     output_path = (output_dir / HARMONIZED_VIZ_HTML) if output_dir is not None else None
     try:
-        return _create_interactive_visualization_impl(outputs, target_extent, output_path, verbose)
+        return _create_interactive_visualization_impl(outputs, target_extent, output_path, verbose,
+                                                       metadata=metadata)
     except Exception as e:
         _log(f"Error creating interactive visualization: {e}", verbose)
         import traceback
@@ -2341,7 +2373,9 @@ def _create_interactive_visualization_impl(
     outputs: list[tuple[str, Path]],
     target_extent: tuple[float, float, float, float],
     output_path: Path | None = None,
-    verbose: bool = True
+    verbose: bool = True,
+    *,
+    metadata: VizMetadata | None = None,
 ) -> folium.Map:
     """Internal implementation of interactive visualization creation."""
     _log("Creating interactive HTML visualization (this may take several minutes for large layers)...", verbose)
@@ -2354,7 +2388,7 @@ def _create_interactive_visualization_impl(
     # Create base map with clean styling (CartoDB positron is clean and doesn't compete with data)
     m = folium.Map(
         location=[center_lat, center_lon],
-        zoom_start=7,
+        zoom_start=10,
         tiles=None  # We'll add our own base layer
     )
     
@@ -2373,8 +2407,8 @@ def _create_interactive_visualization_impl(
     # Add each layer - handle raster and vector differently
     for i, (name, path) in enumerate(outputs):
         _log(f"  Processing layer {i+1}/{len(outputs)}: {name}", verbose)
-        # Check if this is a vector file (GeoJSON)
-        if path.suffix.lower() == '.geojson' or path.suffix.lower() == '.json':
+        # Check if this is a vector file (GeoJSON or Shapefile)
+        if path.suffix.lower() in ['.geojson', '.json', '.shp']:
             # Handle vector data as GeoJSON layer
             _log(f"  Adding vector layer: {name}", verbose)
 
@@ -2384,14 +2418,15 @@ def _create_interactive_visualization_impl(
             # Read the GeoJSON as raw JSON (no geopandas — avoids loading into RAM)
             size_mb = path.stat().st_size / 1024 / 1024
 
-            # Auto-simplify large layers using ogr2ogr (memory-efficient)
-            if size_mb > 50:
+            # Shapefiles must be converted to GeoJSON; also auto-simplify large layers
+            if path.suffix.lower() == '.shp' or size_mb > 50:
                 xmin_t, ymin_t, xmax_t, ymax_t = target_extent
-                tol = min(xmax_t - xmin_t, ymax_t - ymin_t) * 0.001
-                _log(
-                    f"  Large vector ({size_mb:.0f} MB) — simplifying with ogr2ogr...",
-                    verbose,
-                )
+                tol = min(xmax_t - xmin_t, ymax_t - ymin_t) * 0.001 if size_mb > 50 else None
+                if size_mb > 50:
+                    _log(
+                        f"  Large vector ({size_mb:.0f} MB) — simplifying with ogr2ogr...",
+                        verbose,
+                    )
                 try:
                     from src._gdal_utils import ogr2ogr as _ogr2ogr
                     import tempfile
@@ -2399,8 +2434,9 @@ def _create_interactive_visualization_impl(
                         _ogr2ogr(path, Path(tmp.name), simplify=tol)
                         with open(tmp.name) as f:
                             geojson_data = json.load(f)
-                        simplified_mb = Path(tmp.name).stat().st_size / 1024 / 1024
-                        _log(f"  Simplified to ~{simplified_mb:.0f} MB", verbose)
+                        if size_mb > 50:
+                            simplified_mb = Path(tmp.name).stat().st_size / 1024 / 1024
+                            _log(f"  Simplified to ~{simplified_mb:.0f} MB", verbose)
                         Path(tmp.name).unlink(missing_ok=True)
                 except (ImportError, RuntimeError):
                     # Fallback: read raw JSON without simplification
@@ -2436,29 +2472,53 @@ def _create_interactive_visualization_impl(
                     _log(f"  Could not reproject vector for interactive map: {_e}", verbose)
 
             geojson_str = json.dumps(geojson_data)
+            _display = _get_display_name(name, metadata)
             geojson_layer = folium.GeoJson(
                 geojson_str,
-                name=_format_layer_name(name),
+                name=_display,
                 style_function=lambda x, color=style["color"], weight=style["weight"], fill_opacity=style["fillOpacity"]: {
                     'fillColor': color,
                     'color': color,
                     'weight': weight,
                     'fillOpacity': fill_opacity,
                 },
-                tooltip=_format_layer_name(name),
+                tooltip=_display,
             )
             geojson_layer.add_to(m)
-            _opacity_layers.append((_format_layer_name(name), geojson_layer.get_name(), 'vector', style["fillOpacity"]))
+            _opacity_layers.append((_display, geojson_layer.get_name(), 'vector', style["fillOpacity"]))
         else:
             # Handle raster data as image overlay
             _log(f"  Adding raster layer: {name}", verbose)
             with rasterio.open(path) as src:
                 data = src.read(1)
-                # Use target extent for bounds to ensure full coverage
+
+                # If raster is in a projected CRS, reproject pixel data to
+                # EPSG:4326 so it aligns correctly with the folium basemap.
+                from rasterio.crs import CRS as _CRS
+                _wgs84 = _CRS.from_epsg(4326)
+                if src.crs and src.crs != _wgs84:
+                    dst_transform = from_bounds(xmin, ymin, xmax, ymax,
+                                                data.shape[1], data.shape[0])
+                    dst_data = np.zeros_like(data)
+                    reproject(
+                        source=data,
+                        destination=dst_data,
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=dst_transform,
+                        dst_crs=_wgs84,
+                        resampling=Resampling.nearest,
+                    )
+                    data = dst_data
+                    _log("  Reprojected raster to EPSG:4326 for interactive map", verbose)
+
+                # Use target extent (already in EPSG:4326) for bounds
                 bounds = (xmin, ymin, xmax, ymax)
 
                 # Get styling for this layer
-                style = _get_layer_style(name, data, i)
+                _out_dir = output_path.parent if output_path else None
+                style = _get_layer_style(name, data, i,
+                                         color_map_override=_load_color_map_for_dataset(_out_dir, name))
 
                 # Build RGBA array directly with PIL — much smaller than matplotlib figure
                 from PIL import Image as PILImage
@@ -2529,16 +2589,17 @@ def _create_interactive_visualization_impl(
                 
                 # Create image overlay with proper lat/lon bounds using target extent
                 # opacity=1.0 because alpha is already baked into the RGBA pixel data
+                _display = _get_display_name(name, metadata)
                 overlay = folium.raster_layers.ImageOverlay(
                     image=f"data:image/png;base64,{img_base64}",
                     bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-                    name=_format_layer_name(name),
+                    name=_display,
                     opacity=1.0,
                     interactive=True,
                     zindex=i + 10  # Above base maps
                 )
                 overlay.add_to(m)
-                _opacity_layers.append((_format_layer_name(name), overlay.get_name(), 'raster', style["alpha"]))
+                _opacity_layers.append((_display, overlay.get_name(), 'raster', style["alpha"]))
 
     # Add a rectangle to show the target extent
     folium.Rectangle(
@@ -2570,26 +2631,28 @@ def _create_interactive_visualization_impl(
     
     for i, (name, path) in enumerate(outputs):
         # Check if this is a vector file
-        if path.suffix.lower() == '.geojson' or path.suffix.lower() == '.json':
+        if path.suffix.lower() in ['.geojson', '.json', '.shp']:
             style = _get_vector_style(name)
-            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{style["color"]};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {_format_layer_name(name)}</div>'
+            legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{style["color"]};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {_get_display_name(name, metadata)}</div>'
         else:
             with rasterio.open(path) as src:
                 data = src.read(1)
-            style = _get_layer_style(name, data, i)
+            _out_dir = output_path.parent if output_path else None
+            style = _get_layer_style(name, data, i,
+                                     color_map_override=_load_color_map_for_dataset(_out_dir, name))
 
             if style["solid_color"] is not None:
                 # Binary data - show solid color
                 r, g, b, a = style["solid_color"]
                 hex_color = '#{:02x}{:02x}{:02x}'.format(int(r*255), int(g*255), int(b*255))
-                legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{hex_color};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {_format_layer_name(name)}</div>'
+                legend_html += f'<div style="display:flex;align-items:center;margin:3px 0;"><i style="background:{hex_color};width:12px;height:12px;display:inline-block;margin-right:5px;flex-shrink:0;"></i> {_get_display_name(name, metadata)}</div>'
             else:
                 import src.geospatial_harmonizer as _self
                 # Only use the layer's own color_map — not the global DISCOVERED_LABELS,
                 # which persists from prior layers (e.g. FBFM40) and would incorrectly
                 # cause continuous layers (e.g. precipitation) to render as categorical.
                 color_map = style.get("color_map") or {}
-                label_title = _format_layer_name(name)
+                label_title = _get_display_name(name, metadata)
 
                 if color_map:
                     # Categorical data with a per-value color map — show labeled swatches
@@ -2694,6 +2757,9 @@ def _create_interactive_visualization_impl(
       </div>'''
     opacity_html += '\n    </div>'
     m.get_root().html.add_child(folium.Element(opacity_html))
+
+    # Fit map view to the target extent so data is always visible
+    m.fit_bounds([[ymin, xmin], [ymax, xmax]])
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3087,6 +3153,7 @@ def _run_harmonization_inner(workflow: ExampleWorkflow, _wall_start: float) -> t
             output_dir=workflow.output_dir,
             verbose=workflow.verbose,
             target_crs=workflow.target_crs,
+            metadata=viz_meta,
         )
 
     _elapsed = _time.time() - _wall_start

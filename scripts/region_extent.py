@@ -140,10 +140,35 @@ def _resolve_state(shp_path: Path, ident: str) -> dict:
 
 def _reproject_geometry(geom, src_crs: str, dst_crs: str):
     """Reproject a Shapely geometry from src_crs to dst_crs using pyproj."""
-    if src_crs == dst_crs:
+    # Use pyproj.CRS objects for proper comparison (WKT vs EPSG string won't
+    # match with a plain string ==, e.g. NAD83 WKT != "EPSG:4326").
+    src = pyproj.CRS(src_crs)
+    dst = pyproj.CRS(dst_crs)
+    if src == dst:
         return geom
-    transformer = pyproj.Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-    return shapely_transform(transformer.transform, geom)
+    transformer = pyproj.Transformer.from_crs(
+        src, dst, always_xy=True, allow_ballpark=True,
+    )
+    result = shapely_transform(transformer.transform, geom)
+    # Validate: some PROJ configurations produce inf when datum grids are
+    # missing.  Fall back to the original geometry if the CRSes are both
+    # geographic (NAD83 ↔ WGS84 differs by < 2 m, safe to skip).
+    bounds = result.bounds
+    import math
+    if any(math.isinf(v) or math.isnan(v) for v in bounds):
+        if src.is_geographic and dst.is_geographic:
+            print(
+                f"Warning: reprojection {src.to_epsg()} → {dst.to_epsg()} "
+                f"produced invalid bounds — using original coordinates "
+                f"(NAD83/WGS84 offset is < 2 m)",
+                file=sys.stderr,
+            )
+            return geom
+        sys.exit(
+            f"Reprojection from {src_crs} to {dst_crs} produced invalid bounds. "
+            f"Check that PROJ datum grids are installed."
+        )
+    return result
 
 
 def _round_bbox(bbox, is_geographic: bool):
