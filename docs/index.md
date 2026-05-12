@@ -41,15 +41,15 @@ This lesson will guide you through building and working within that structure. Y
 This is the standard we are aiming for. Not informal experimentation, but structured acceleration. Not less rigor, but a different way of achieving it.
 
 <div class="oasis-link-grid" markdown>
-[Start Here](start-here.md){ .md-button .md-button--primary }
+[Run Locally](start-here.md){ .md-button .md-button--primary }
 [Run on CyVerse](cyverse.md){ .md-button }
 [Bring Your Own Data](provide-your-own-data-sources.md){ .md-button }
 [Developer Documentation](developer-docs.md){ .md-button }
 </div>
 
-## Start Here
+## Choose a Run Path
 
-If you already have access to a model and a compute environment, begin with [Quick Start](start-here.md).
+If you already have access to a model and a working Python environment on your computer, begin with [Run Locally](start-here.md).
 
 If you want a full walkthrough using ESIIL infrastructure, follow [Run on CyVerse](cyverse.md).
 

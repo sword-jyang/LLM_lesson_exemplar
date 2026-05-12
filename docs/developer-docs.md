@@ -2,7 +2,7 @@
 
 # Developer Documentation
 
-This page is for maintainers and contributors who need to understand how the lesson site and repository are organized. It is not the fastest way to run the lesson. For the short path, use [Quick Start](start-here.md). For the guided cloud tutorial, use [Run on CyVerse](cyverse.md).
+This page is for maintainers and contributors who need to understand how the lesson site and repository are organized. It is not the fastest way to run the lesson. For a local setup, use [Run Locally](start-here.md). For the guided cloud tutorial, use [Run on CyVerse](cyverse.md).
 
 ## Repository structure
 
@@ -26,7 +26,7 @@ LLM_lesson_exemplar/
 The website is built with MkDocs Material. The main documentation pages are:
 
 - `docs/index.md`: public-facing homepage.
-- `docs/start-here.md`: quick start page for users with an existing LLM environment.
+- `docs/start-here.md`: local run page for users with an existing Python and model environment.
 - `docs/slides.md`: native website lesson slideshow.
 - `docs/available-models.md`: guidance on model options, endpoint setup, and reproducibility notes.
 - `docs/agents-and-systems.md`: training guide chapter on agentic AI systems, memory, tools, evaluation, and provenance.
@@ -42,7 +42,7 @@ The website is built with MkDocs Material. The main documentation pages are:
 Keep the documentation organized by user intent:
 
 - The homepage explains what the lesson is and routes users to the right place.
-- Quick Start minimizes friction for users who already have an environment.
+- Run Locally supports users who already have Python, Git, and model access on their own computer.
 - The LLM Guide section groups conceptual teaching material, model choices, hosting context, and developer notes.
 - The Workflows section is populated from workflow docs and output folders by `hooks.py`.
 - Developer Documentation records structure, maintenance notes, reference details, and modification guidance.

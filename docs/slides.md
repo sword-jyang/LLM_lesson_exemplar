@@ -135,7 +135,7 @@ Then use your scientific expertise to verify the result.
 </section>
 </div>
 <div class="slide-nav-links" markdown>
-[Start Here](start-here.md){ .md-button .md-button--primary }
+[Run Locally](start-here.md){ .md-button .md-button--primary }
 [Run on CyVerse](cyverse.md){ .md-button }
 [Modify the Lesson](modify.md){ .md-button }
 </div>

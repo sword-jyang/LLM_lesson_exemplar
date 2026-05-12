@@ -8,7 +8,7 @@ For more context on the compute environment behind this workflow, see [LLM Hosti
 
 By the end of this page, you will have launched a CyVerse analysis, opened a working session, connected the session to GitHub, cloned the lesson repository, added your LLM credentials safely, run the reference workflow, and checked the output files.
 
-If you already have Python, Git, and an LLM API key working on your own computer, you may prefer the shorter [Quick Start](start-here.md) page.
+If you already have Python, Git, and an LLM API key working on your own computer, you may prefer the [Run Locally](start-here.md) page.
 
 !!! warning "Do not put secrets in screenshots"
     This page includes workshop screenshots. Before adding or updating screenshots, remove or blur usernames, tokens, API keys, private file paths, email addresses, and anything else that should not be public.
@@ -49,9 +49,30 @@ If CyVerse asks you to sign in, log in with your CyVerse account and continue wi
 On the launch page:
 
 1. Confirm that the app is the ESIIL OASIS training environment.
-2. Give the analysis a recognizable name, such as `llm-lesson-yourname`.
-3. Leave CPU, memory, and advanced resource settings at their defaults unless the instructor tells you otherwise.
-4. Click **Launch Analysis**, **Run**, or the final launch button shown by CyVerse.
+2. Ensure the container image **Version** is `4.5`.
+3. Name the analysis, decide where you want it saved, and complete the remaining analysis information fields.
+4. In **Advanced Settings**, select **4** or **8 CPU Cores**. Start with **4**, but if you run out of memory, select **8** in the future.
+5. Click **Launch Analysis**, **Run**, or the final launch button shown by CyVerse.
+
+![Screenshot showing the ESIIL_OASIS launch page with Version 4.5 selected.](assets/images/cyverse/cyverse-04-launch-version.png)
+
+*Choose container image version `4.5` before launching the analysis.*
+
+![Screenshot showing the Advanced Settings CPU Cores dropdown with 4 and 8 highlighted.](assets/images/cyverse/cyverse-04-cpu-cores.png)
+
+*Select 4 or 8 CPU Cores in Advanced Settings.*
+
+??? info "If the direct launch link is not working"
+    Use the longer CyVerse navigation path:
+
+    1. Log in to CyVerse at [https://user.cyverse.org](https://user.cyverse.org).
+    2. Click **Discovery Environment**.
+    3. Launch the Discovery Environment.
+    4. Under **Featured Apps**, launch the app **ESIIL_OASIS**.
+    5. Ensure the **Version** is `4.5`.
+    6. Name the analysis, decide where you want it saved, and complete the analysis information fields.
+    7. In **Advanced Settings**, select **4** or **8 CPU Cores**. Start with **4**, but if you run out of memory, select **8** in the future.
+    8. Click **Launch Analysis**.
 
 CyVerse will now start the environment. This can take a few minutes. You may see the analysis move through statuses such as submitted, queued, running, or ready.
 
@@ -143,7 +164,7 @@ cd LLM_lesson_exemplar</code></pre>
     <p>Confirm that you are inside the repository:</p>
     <pre><code class="language-bash">ls</code></pre>
     <p>You should see files such as <code>README.md</code>, <code>docs/</code>, <code>mkdocs.yml</code>, <code>examples/</code>, or lesson-related folders.</p>
-    <p>If you used the VS Code file browser to open <code>/home/jovyan/work/</code>, navigate into the <code>LLM_lesson_exemplar</code> folder after cloning. This is the folder you will use for Cline and terminal commands.</p>
+    <p>If you used the VS Code file browser to open <code>/home/jovyan/work/</code>, navigate into the <code>LLM_lesson_exemplar</code> folder after cloning. This is the folder you will use for Roo and terminal commands.</p>
     <p><img src="assets/images/cyverse/cyverse-08-github-clone.png" alt="Screenshot showing the terminal command to clone the lesson repository from GitHub."></p>
     <p><em>Cloning the lesson repository from GitHub.</em></p>
     <p>If you plan to edit the lesson and push changes back to GitHub, fork the repository first and clone your fork instead. For simply running the lesson, cloning the public repository is enough.</p>
@@ -177,74 +198,73 @@ When the environment is active, your terminal prompt may show `(.venv)` at the b
 
 If the repository includes a Conda environment file, such as `environment.yml`, and the instructor tells you to use Conda, use the instructor-provided command instead. Do not mix Conda and virtual environment setup unless you know why you are doing it.
 
-## Step 6: Add model credentials safely
+## Step 6: Configure Roo and model credentials
 
-Most LLM workflows need either an API key or a model endpoint. The safest pattern for a workshop is to store the key in an environment variable for the current terminal session or paste it into the secure model settings field in the VS Code extension.
+Most LLM workflows need either an API key or a model endpoint. For this workshop, configure Roo inside VS Code to use the CyVerse-hosted OpenAI-compatible endpoint.
 
-For OpenAI-compatible workflows in a terminal, use:
+Open **Roo** in the left sidebar.
 
-```bash
-export OPENAI_API_KEY="paste-your-key-here"
+1. Click **use without an account**.
+2. Select **3rd-party Provider**.
+3. Set **API Provider** to **OpenAI Compatible**.
+4. Set **Base URL** to:
+
+```text
+https://llm-api.cyverse.ai/v1
 ```
 
-If the training uses the CyVerse-hosted model endpoint, the instructor may give you values such as:
+5. For **OpenAI Compatible API Key**, copy the key from:
 
-```bash
-export OPENAI_API_KEY="paste-your-key-here"
-export OPENAI_BASE_URL="https://llm-api.cyverse.ai/v1"
-export MODEL_NAME="nrp/qwen3-small"
+```text
+https://chat.cyverse.ai/courses/course_d08lbl2f20uc73d4qn9g/apikey
 ```
 
-Do not copy example key values from a slide, screenshot, or shared note unless the instructor tells you to. Replace them with the values for the training.
+If you do not have access to that API key page, let the training team know.
 
-To check whether the key is set without printing the key itself, run:
+![Screenshot showing Roo in the VS Code sidebar with the use without an account option.](assets/images/cyverse/cyverse-09-roo-open.png)
 
-```bash
-python -c "import os; print('OPENAI_API_KEY is set' if os.getenv('OPENAI_API_KEY') else 'OPENAI_API_KEY is missing')"
-```
+*Opening Roo from the VS Code sidebar and choosing to use it without an account.*
 
-!!! warning "Do not commit secrets"
-    Do not put your API key directly in a Python script, notebook, Markdown file, or Git-tracked configuration file. Do not take screenshots that show the key. Do not run commands that print the full key into a terminal that will be screenshotted or shared.
+![Screenshot showing Roo configured with 3rd-party Provider and OpenAI Compatible selected.](assets/images/cyverse/cyverse-10-roo-provider.png)
 
-### Optional: configure Cline in VS Code
+*Selecting the 3rd-party Provider path in Roo.*
 
-If the workshop uses Cline inside VS Code, open Cline from the left sidebar and choose **Bring my own API key**. Use the instructor-provided credentials.
+![Screenshot showing the CyVerse course API Key page with the copy button highlighted.](assets/images/cyverse/cyverse-11-roo-api-key.png)
 
-For the CyVerse-hosted endpoint, the settings may look like:
+*Copying the workshop API key from the CyVerse course page.*
 
-| Setting | Value |
-|---|---|
-| API Provider | OpenAI Compatible |
-| Base URL | `https://llm-api.cyverse.ai/v1` |
-| OpenAI Compatible API Key | Provided privately by the instructor |
-| Model ID | One of the supported model IDs |
+For **Model ID**, pick one of the following models:
 
-Supported model IDs for this training may include:
-
+- `nrp/qwen3-small`
 - `nrp/minimax-m2`
 - `nrp/glm-4.7`
-- `nrp/qwen3-small`
 - `js2/gpt-oss-120b`
-- `nrp/kimi`
-- `nrp/qwen3`
-- `js2/llama-4-scout`
 
-Some models may be slower than others. If the model is doing poorly, ask the training team for help, record what happened, and try another model. Some models also expose a reasoning setting that can be increased in the interface.
+All the other settings can remain unchanged.
 
 If you want a deeper comparison of model options and tradeoffs, see [Available Models](available-models.md).
 
-!!! note "If Cline asks for Sonnet"
-    Cline may strongly recommend a default Anthropic model such as Sonnet. For this training, ignore that recommendation and use the CyVerse/OpenAI-compatible endpoint supplied by the instructor. If Cline asks you to confirm, click **Proceed Anyway**.
+!!! warning "Protect API keys"
+    Do not paste the API key into a public Markdown file, notebook cell that will be committed, GitHub issue, screenshot, slide, chat message, or shared document. Use the Roo settings field, environment variables, or an ignored `.env` file.
 
-If the model is doing poorly:
+### Configure Roo auto-approve
 
-1. Tell the training team what happened. It is often something that can be fixed in the repository instructions or `AGENTS.md`.
-2. Try increasing **Model Reasoning** in the Cline settings if the selected model exposes that option.
-3. Record what happened and try another model from the list.
+Configure Roo to automatically run tasks. Otherwise, you will need to monitor the chat frequently for task execution.
 
-![Screenshot showing Cline configured with an OpenAI-compatible provider, CyVerse base URL, hidden API key, and model ID.](assets/images/cyverse/cyverse-09-env-file.png)
+1. Click **Settings** in Roo.
+2. Navigate to **Auto-Approve**.
+3. Check the box next to **Auto-Approve Enabled**.
+4. Enable **Read**, **Write**, **MCP**, **Mode**, **Subtasks**, and **Execute**.
+5. Leave **Question** unchecked so the LLM can still ask for feedback.
+6. Make sure **Code** mode is turned on in the chat interface.
 
-*Safe model credential setup with the API key hidden.*
+![Screenshot showing Roo Auto-Approve settings with Read, Write, MCP, Mode, Subtasks, and Execute enabled while Question is unchecked.](assets/images/cyverse/cyverse-12-roo-auto-approve.png)
+
+*Configuring Roo Auto-Approve while leaving Questions unchecked.*
+
+![Screenshot showing Roo Code mode turned on in the chat interface.](assets/images/cyverse/cyverse-13-roo-code-mode.png)
+
+*Roo Code mode turned on before running the workflow.*
 
 ## Step 7: Run the reference workflow
 
@@ -262,16 +282,16 @@ As the workflow runs, watch the terminal output. You are looking for three thing
 2. The model call succeeds or the lesson uses the configured model endpoint.
 3. The workflow writes output files to the expected output folder.
 
-![Screenshot showing a Cline chat interaction while the workflow runs.](assets/images/cyverse/cyverse-10-run-workflow.png)
+![Screenshot showing Roo chat with Code mode turned on.](assets/images/cyverse/cyverse-13-roo-code-mode.png)
 
-*Running or testing the agentic workflow from the CyVerse workspace.*
+*Use Roo chat with Code mode turned on when asking the agent to run the workflow.*
 
-You can also test the app through Cline's chat. Ask it to harmonize your data. Your request must include:
+You can also test the app through Roo's chat. Ask it to harmonize your data. Your request must include:
 
 - projection,
 - extent,
 - resolution,
-- and URLs to download the data from.
+- and URLs to download the data from, or a dataset from the data catalog.
 
 For a deeper explanation of how agents operate within structured repositories, see [Agents and Systems](agents-and-systems.md).
 
@@ -286,7 +306,26 @@ The LLM should produce:
 - a PNG image showing the datasets side-by-side,
 - and an interactive HTML map.
 
-Be patient. It can be slow to generate the outputs, and the HTML file can take up to 10 minutes.
+![Screenshot showing an example workflow output folder with processed files, a PNG visualization, and an interactive HTML map.](assets/images/cyverse/cyverse-14-output-example.png)
+
+*Example of what the output folder should look like after Roo creates a workflow.*
+
+## LLM tips and guidance
+
+Monitor the LLM closely at the start to ensure it is not waiting for your approval on a task.
+
+Be very specific in your instructions. The example request below shows the level of detail that works well.
+
+It can be slow to generate the outputs, often around 30 minutes. Check the `output/` folder for progress; once you see a `.png` and `.html`, you will know it is done.
+
+Provide good URLs. The next section explains how to get direct download URLs.
+
+If Roo gets stuck on **API Request** for more than 30 seconds:
+
+1. Click the stop button.
+2. Click **Continue**.
+
+If the model is doing poorly, try another model.
 
 ## Step 8: Check the outputs
 
@@ -349,7 +388,7 @@ Download these datasets, harmonize them to EPSG:4326 over Colorado, and generate
   https://landfire.gov/sites/default/files/CSV/2024/LF2024_FBFM40.csv
 
 - MACAv2 winter precipitation via OPeNDAP (raster, continuous, variable precipitation, months Dec-Mar):
-  https://thredds.northwestknowledge.net/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
+  http://thredds.northwestknowledge.net:8080/thredds/dodsC/agg_macav2metdata_pr_CCSM4_r6i1p1_rcp85_2006_2099_CONUS_monthly.nc
 
 - MTBS burned area boundaries (vector, do not rasterize):
   https://edcintl.cr.usgs.gov/downloads/sciweb1/shared/MTBS_Fire/data/composite_data/burned_area_extent_shapefile/mtbs_perimeter_data.zip
@@ -374,7 +413,12 @@ To get the actual file URL from Chrome:
 3. Right-click the file name and choose **Copy link address**.
 4. Paste the URL into a new browser tab as a quick test.
 
-The right URL usually starts downloading the file directly. It often ends in a real file extension such as `.tif`, `.zip`, or `.nc`. If it loads a viewer page or a landing page, it is probably not the direct download URL.
+The right URL usually starts downloading the file directly. It often ends in a real file extension such as `.tif`, `.zip`, or `.nc` and does not contain words like `viewer` or `landing`. If it loads a viewer page or a landing page, it is probably not the direct download URL.
+
+There are some exceptions that will not auto-download but are still valid:
+
+- OPeNDAP URLs that contain `dodsC` or `thredds` are data streaming endpoints accessed by code, not browsers. They may show a text page or error in a browser, but they work when used with xarray or NetCDF tools.
+- STAC API URLs that end in `/v1` or `/stac` are search catalogs, not file downloads. They may show JSON in a browser, which is correct.
 
 ## Common issues
 
