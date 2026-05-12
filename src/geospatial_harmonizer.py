@@ -2076,8 +2076,9 @@ def _create_visualization_impl(
     ax_info.axis("off")
     _add_panel_frame(ax_info)
 
+    _legend_bottom = 0.95  # default if no legend
     if composite_legend_handles:
-        ax_info.legend(
+        leg = ax_info.legend(
             handles=composite_legend_handles,
             loc='upper left',
             bbox_to_anchor=(0.05, 0.95),
@@ -2088,18 +2089,21 @@ def _create_visualization_impl(
             title="Map Layers",
             title_fontsize=12,
         )
+        # Estimate legend height: ~0.06 per entry + 0.08 for title/padding
+        _legend_bottom = 0.95 - (len(composite_legend_handles) * 0.06 + 0.08)
 
-    # Summary text
+    # Summary text — positioned below the legend
     if metadata and metadata.summary:
         import textwrap
         wrapped = "\n".join(textwrap.wrap(metadata.summary, width=45))
+        _summary_top = min(_legend_bottom - 0.05, 0.35)
         ax_info.text(
-            0.05, 0.35, "Summary",
+            0.05, _summary_top, "Summary",
             transform=ax_info.transAxes,
             fontsize=14, fontweight='bold', va='top', ha='left',
         )
         ax_info.text(
-            0.05, 0.28, wrapped,
+            0.05, _summary_top - 0.07, wrapped,
             transform=ax_info.transAxes,
             fontsize=11, va='top', ha='left',
             linespacing=1.5,
