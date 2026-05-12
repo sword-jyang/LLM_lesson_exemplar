@@ -1414,9 +1414,9 @@ def rasterize_vector_to_grid(
             )
         return output_path
 
-    except (ImportError, RuntimeError):
+    except (ImportError, RuntimeError) as _gdal_err:
         # Fallback: stream geometries with fiona + rasterize with rasterio
-        _log("  GDAL CLI not available, falling back to fiona + rasterio", verbose)
+        _log(f"  GDAL CLI unavailable or failed ({_gdal_err}), falling back to fiona + rasterio", verbose)
 
         shapes = []
         transformer = None
@@ -1538,9 +1538,9 @@ def harmonize_vector(
 
         return output_path
 
-    except (ImportError, RuntimeError):
+    except (ImportError, RuntimeError) as _gdal_err:
         # Fallback: stream with fiona + shapely
-        _log("  GDAL CLI not available, falling back to fiona + shapely", verbose)
+        _log(f"  GDAL CLI unavailable or failed ({_gdal_err}), falling back to fiona + shapely", verbose)
 
         transformer = None
         features_out = []
