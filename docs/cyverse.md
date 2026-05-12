@@ -19,6 +19,10 @@ You will move through the workflow in four phases. First, you will launch the Cy
 
 This page is written as a click-by-click guide. The exact button names in CyVerse may change slightly over time, but the workflow should remain the same: open the launch link, start the analysis, open the running analysis, use a terminal, clone the repository, install dependencies, set credentials, and run the lesson.
 
+![Conceptual workflow diagram titled You and the Agent: Harmonizing Together, showing the learner deciding, the agent working in the workspace, the learner reviewing local changes, and the learner pushing and publishing through GitHub.](assets/images/cyverse/you-and-agent-harmonizing-together.png){ .cyverse-concept-figure }
+
+*Figure: Conceptual algorithm for the CyVerse tutorial. You provide the goal, context, data, and rules; the agent works inside the browser-based workspace to inspect data, edit files, run tools, and create outputs; you review and save the local project changes; then you decide what to push, publish, and share through GitHub.*
+
 ## Before you begin
 
 Make sure you have the following before starting:

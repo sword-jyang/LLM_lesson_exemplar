@@ -183,6 +183,14 @@ body[data-md-color-scheme="slate"] .md-main {
   object-fit: contain;
 }
 
+.md-typeset img.cyverse-concept-figure {
+  display: block;
+  width: 100%;
+  margin: 1.5rem auto 0.65rem;
+  border: 1px solid rgba(35, 74, 101, 0.14);
+  border-radius: 0.4rem;
+}
+
 /* ── GitHub connection path panels ──────────────────────────────────────── */
 .github-path-panels {
   display: grid;
