@@ -2172,10 +2172,31 @@ def _get_layer_style(name: str, data: np.ndarray, index: int, *,
             "vmax": max(_effective_color_map.keys()),
         }
 
-    # Continuous or categorical — pick colormap by index
-    cmap_name = _COLORMAPS[index % len(_COLORMAPS)]
+    # Check if data is categorical (integer dtype with few unique non-zero values)
     valid = data[~np.isnan(data)] if np.issubdtype(data.dtype, np.floating) else data
     valid = valid[valid != 0] if valid.size > 0 else valid
+    unique_vals = np.unique(valid) if valid.size > 0 else np.array([])
+
+    if (np.issubdtype(data.dtype, np.integer)
+            and 2 < len(unique_vals) <= 20):
+        # Auto-generate a categorical color map with distinct colors
+        import matplotlib.cm as cm
+        cmap = cm.get_cmap("tab20", len(unique_vals))
+        auto_color_map = {}
+        for j, val in enumerate(sorted(unique_vals)):
+            r, g, b, _ = cmap(j)
+            auto_color_map[int(val)] = (int(r * 255), int(g * 255), int(b * 255))
+        return {
+            "colormap": None,
+            "color_map": auto_color_map,
+            "solid_color": None,
+            "alpha": 0.7,
+            "vmin": min(auto_color_map.keys()),
+            "vmax": max(auto_color_map.keys()),
+        }
+
+    # Continuous data — pick colormap by index
+    cmap_name = _COLORMAPS[index % len(_COLORMAPS)]
     vmin = float(np.nanmin(valid)) if valid.size > 0 else 0
     vmax = float(np.nanmax(valid)) if valid.size > 0 else 1
 
