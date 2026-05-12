@@ -6,11 +6,23 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentSlide = 0;
   let presenterMode = false;
 
+  function fitSlide(slide) {
+    slide.style.removeProperty("--presenter-slide-base");
+    if (!presenterMode) return;
+
+    let scale = 1;
+    while (slide.scrollHeight > slide.clientHeight && scale > 0.72) {
+      scale -= 0.04;
+      slide.style.setProperty("--presenter-slide-base", `${scale.toFixed(2)}rem`);
+    }
+  }
+
   function showSlide(index) {
     currentSlide = Math.max(0, Math.min(index, slides.length - 1));
     slides.forEach((slide, i) => {
       slide.classList.toggle("is-active-slide", i === currentSlide);
     });
+    window.requestAnimationFrame(() => fitSlide(slides[currentSlide]));
   }
 
   function enterPresenterMode() {
@@ -54,5 +66,9 @@ document.addEventListener("DOMContentLoaded", () => {
       event.preventDefault();
       showSlide(currentSlide - 1);
     }
+  });
+
+  window.addEventListener("resize", () => {
+    if (presenterMode) fitSlide(slides[currentSlide]);
   });
 });

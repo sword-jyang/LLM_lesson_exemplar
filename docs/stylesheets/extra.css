@@ -781,13 +781,41 @@ body[data-md-color-scheme="slate"] .md-main {
 }
 
 .lesson-presenter-mode .lesson-slide {
+  --presenter-slide-base: clamp(0.92rem, 1.55vw, 1.05rem);
   display: none;
   min-height: 100vh;
   width: 100vw;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  padding: clamp(2.5rem, 7vw, 6rem);
+  padding: clamp(1.5rem, 4vw, 3.25rem);
+  font-size: var(--presenter-slide-base);
+  overflow-y: auto;
+}
+
+.lesson-presenter-mode .lesson-slide h1 {
+  font-size: 3em;
+  margin-bottom: 0.8em;
+}
+
+.lesson-presenter-mode .lesson-slide h2 {
+  font-size: 1.9em;
+}
+
+.lesson-presenter-mode .lesson-slide h3 {
+  font-size: 1.3em;
+}
+
+.lesson-presenter-mode .lesson-slide p,
+.lesson-presenter-mode .lesson-slide li {
+  font-size: 1.08em;
+  line-height: 1.32;
+}
+
+.lesson-presenter-mode .lesson-slide ul,
+.lesson-presenter-mode .lesson-slide ol {
+  margin-top: 0.45em;
+  margin-bottom: 0.45em;
 }
 
 .lesson-presenter-mode .lesson-slide.is-active-slide {
