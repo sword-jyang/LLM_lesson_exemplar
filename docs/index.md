@@ -13,6 +13,7 @@
 
     Testing and feedback:
 
+    - Nate Hofford
     - Matt Bitters
     - Bridger Huhn
     - Danielle Losos
