@@ -241,7 +241,6 @@ For **Model ID**, pick one of the following models:
 
 - `nrp/qwen3-small`
 - `nrp/minimax-m2`
-- `nrp/glm-4.7`
 - `js2/gpt-oss-120b`
 
 All the other settings can remain unchanged.
