@@ -1894,7 +1894,7 @@ def _create_visualization_impl(
             vmax = style["vmax"] if style["vmax"] is not None else np.nanmax(data)
             if vmin == vmax:
                 vmax = vmin + 1
-            unique_vals = np.unique(data[data > 0])
+            unique_vals = np.unique(data[data != 0])
             is_categorical = len(unique_vals) > 20
             masked_data = np.ma.masked_equal(data, 0)
 
@@ -1942,6 +1942,11 @@ def _create_visualization_impl(
             except Exception:
                 pass
 
+        # Force all raster panels to the same extent so they're visually comparable
+        if _scale_extent is not None:
+            ax.set_xlim(_scale_extent[0], _scale_extent[2])
+            ax.set_ylim(_scale_extent[1], _scale_extent[3])
+
         desc = _get_description(name, metadata)
         title_str = f"{display}\n{desc}" if desc else display
         ax.set_title(title_str, fontsize=14, fontweight='bold', pad=8,
@@ -1949,6 +1954,8 @@ def _create_visualization_impl(
         ax.axis("off")
 
         # Scale bar + frame + letter
+        if _scale_extent is not None:
+            layer_bounds = (_scale_extent[0], _scale_extent[1], _scale_extent[2], _scale_extent[3])
         if layer_bounds and _scale_crs:
             _add_scale_bar(ax, layer_bounds, _scale_crs)
         _add_panel_frame(ax)
@@ -1998,7 +2005,7 @@ def _create_visualization_impl(
                 if vmin == vmax:
                     vmax = vmin + 1
                 masked_data = np.ma.masked_equal(data, 0)
-                unique_vals = np.unique(data[data > 0])
+                unique_vals = np.unique(data[data != 0])
 
                 if (len(unique_vals) > 20 and "fbfm" in layer_name.lower()
                         and "color_map" in style and style["color_map"]):
@@ -2596,21 +2603,21 @@ def _create_interactive_visualization_impl(
                     import matplotlib.cm as cm
                     from matplotlib.colors import BoundaryNorm, ListedColormap, Normalize
 
-                    _pos = data[data > 0]
-                    if _pos.size == 0:
+                    _valid = data[data != 0]
+                    if _valid.size == 0:
                         _log(f"  Skipping empty raster layer: {name}", verbose)
                         continue
-                    vmin = style["vmin"] if style["vmin"] is not None else float(np.nanmin(_pos))
-                    vmax = style["vmax"] if style["vmax"] is not None else float(np.nanmax(data))
+                    vmin = style["vmin"] if style["vmin"] is not None else float(np.nanmin(_valid))
+                    vmax = style["vmax"] if style["vmax"] is not None else float(np.nanmax(_valid))
                     if vmin == vmax:
                         vmax = vmin + 1
-                    unique_vals = np.unique(_pos)
+                    unique_vals = np.unique(_valid)
                     is_categorical = len(unique_vals) > 20
 
                     if style.get("color_map"):
                         color_map = style["color_map"]
                         # Paint all non-zero pixels light grey first (catches unlabeled codes)
-                        artifact_px = (data > 0) & ~np.isin(data, list(color_map.keys()))
+                        artifact_px = (data != 0) & ~np.isin(data, list(color_map.keys()))
                         rgba[artifact_px, 0] = 180
                         rgba[artifact_px, 1] = 180
                         rgba[artifact_px, 2] = 180
@@ -2626,7 +2633,7 @@ def _create_interactive_visualization_impl(
                         cmap = cm.get_cmap(style["colormap"])
                         norm = Normalize(vmin=vmin, vmax=vmax)
 
-                        valid = data > 0
+                        valid = data != 0
                         normed = norm(data[valid].astype(float))
                         colored = cmap(normed)  # (N, 4) float 0-1
                         rgba[valid, 0] = (colored[:, 0] * 255).astype(np.uint8)
@@ -2724,7 +2731,7 @@ def _create_interactive_visualization_impl(
                 if color_map:
                     # Categorical data with a per-value color map — show labeled swatches
                     labels_map = _self.DISCOVERED_LABELS or {}
-                    unique_present = sorted(np.unique(data[np.isfinite(data) & (data > 0)]).tolist())
+                    unique_present = sorted(np.unique(data[np.isfinite(data) & (data != 0)]).tolist())
                     named_present = [v for v in unique_present if v in color_map or labels_map.get(v, str(v)) != str(v)]
                     legend_html += f'<div style="margin:4px 0 2px;font-weight:bold;">{label_title}</div>'
                     legend_html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;font-size:11px;">'
