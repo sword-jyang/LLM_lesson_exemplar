@@ -2677,16 +2677,6 @@ def _create_interactive_visualization_impl(
                 overlay.add_to(m)
                 _opacity_layers.append((_display, overlay.get_name(), 'raster', style["alpha"]))
 
-    # Add a rectangle to show the target extent
-    folium.Rectangle(
-        bounds=[[ymin, xmin], [ymax, xmax]],
-        color="#3186cc",
-        fill=True,
-        fill_color="#3186cc",
-        fill_opacity=0.1,
-        name="Target Extent"
-    ).add_to(m)
-    
     # Add fullscreen option
     folium.plugins.Fullscreen().add_to(m)
     
