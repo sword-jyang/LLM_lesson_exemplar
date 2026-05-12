@@ -1853,6 +1853,9 @@ def _create_visualization_impl(
             layer_bounds = (bnds.left, bnds.bottom, bnds.right, bnds.top)
             if _scale_crs is None:
                 _scale_crs = src.crs.to_string() if src.crs else None
+            # Mask nodata values to 0 so they're excluded from visualization
+            if src.nodata is not None:
+                data = np.where(data == src.nodata, 0, data)
 
         # imshow extent in [left, right, bottom, top] — renders in geo-coordinates
         raster_extent = [bnds.left, bnds.right, bnds.bottom, bnds.top]
@@ -1963,6 +1966,8 @@ def _create_visualization_impl(
                 data = src.read(1)
                 bnds = src.bounds
                 img_extent = [bnds.left, bnds.right, bnds.bottom, bnds.top]
+                if src.nodata is not None:
+                    data = np.where(data == src.nodata, 0, data)
 
             style = _get_layer_style(layer_name, data, i,
                                     color_map_override=_load_color_map_for_dataset(output_path.parent, layer_name))
@@ -2532,6 +2537,9 @@ def _create_interactive_visualization_impl(
             _log(f"  Adding raster layer: {name}", verbose)
             with rasterio.open(path) as src:
                 data = src.read(1)
+                # Mask nodata values to 0 so they're excluded from visualization
+                if src.nodata is not None:
+                    data = np.where(data == src.nodata, 0, data)
 
                 # If raster is in a projected CRS, reproject pixel data to
                 # EPSG:4326 so it aligns correctly with the folium basemap.
@@ -2684,6 +2692,8 @@ def _create_interactive_visualization_impl(
         else:
             with rasterio.open(path) as src:
                 data = src.read(1)
+                if src.nodata is not None:
+                    data = np.where(data == src.nodata, 0, data)
             _out_dir = output_path.parent if output_path else None
             style = _get_layer_style(name, data, i,
                                      color_map_override=_load_color_map_for_dataset(_out_dir, name))
