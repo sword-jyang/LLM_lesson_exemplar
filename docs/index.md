@@ -13,10 +13,10 @@
 
     Testing and feedback:
 
-    - Nate Hofford
-    - Matt Bitters
-    - Bridger Huhn
-    - Danielle Losos
+    - Nate Hofford (Earth Lab)
+    - Matt Bitters (Earth Lab)
+    - Bridger Huhn (ASCEND Engine)
+    - Danielle Losos (Earth Lab)
 
 ## Agentic Repositories for Environmental Data Science
 
