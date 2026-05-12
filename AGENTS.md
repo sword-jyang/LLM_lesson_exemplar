@@ -22,7 +22,12 @@ build an `ExampleWorkflow`, call `run_harmonization_example()`.
 3. **Get region bounds** — `python scripts/region_extent.py state Colorado`. Always set `clip_boundary` (e.g. `clip_boundary="state:Colorado"`).
 4. **Write a Python script** in `workflows/<project_name>/` using the bootstrap header below.
 5. **Set `output_dir=Path(__file__).parent / "output"`**.
-6. **Run with nohup** — `nohup python workflows/<name>/<script>.py > workflows/<name>/output/run.log 2>&1 &`. Poll `.status` (first at 2 min, then every 3 min). Wait for completion before re-running.
+6. **Run with nohup** — create the output directory first, then run:
+   ```bash
+   mkdir -p workflows/<name>/output
+   nohup python workflows/<name>/<script>.py > workflows/<name>/output/run.log 2>&1 &
+   ```
+   Poll `.status` (first at 2 min, then every 3 min). Wait for completion before re-running.
 
 ## After It Runs
 

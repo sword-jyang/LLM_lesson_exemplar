@@ -1184,8 +1184,10 @@ def resolve_clip_boundary(
                 geoms.append(shapely_shape(feat["geometry"]))
 
         # Reproject if needed
-        if src_crs != target_crs:
-            transformer = pyproj.Transformer.from_crs(src_crs, target_crs, always_xy=True)
+        if pyproj.CRS(src_crs) != pyproj.CRS(target_crs):
+            transformer = pyproj.Transformer.from_crs(
+                src_crs, target_crs, always_xy=True, allow_ballpark=True,
+            )
             geoms = [shapely_transform(transformer.transform, g) for g in geoms]
 
         geom = unary_union(geoms)
@@ -1374,17 +1376,21 @@ def rasterize_vector_to_grid(
             with fiona.open(str(input_path)) as src_file:
                 src_crs = src_file.crs_wkt or "EPSG:4326"
 
+            _src_crs_obj = pyproj.CRS(src_crs)
+            _grid_crs_obj = pyproj.CRS(grid.crs)
             if grid.clip_geometry is not None:
                 _log("  Clipping vector to boundary polygon", verbose)
                 clip_geom = grid.clip_geometry
-                if src_crs != grid.crs:
-                    transformer = pyproj.Transformer.from_crs(grid.crs, src_crs, always_xy=True)
+                if _src_crs_obj != _grid_crs_obj:
+                    transformer = pyproj.Transformer.from_crs(
+                        _grid_crs_obj, _src_crs_obj, always_xy=True, allow_ballpark=True,
+                    )
                     clip_geom = shapely_transform(transformer.transform, clip_geom)
                 clip_file = Path(tmpdir) / "clip_boundary.geojson"
                 write_geometry_to_geojson(clip_geom, src_crs, clip_file)
                 ogr_kwargs["clipsrc"] = str(clip_file)
             else:
-                if src_crs != grid.crs:
+                if _src_crs_obj != _grid_crs_obj:
                     from rasterio.warp import transform_bounds
                     spat = transform_bounds(grid.crs, src_crs, xmin, ymin, xmax, ymax)
                 else:
@@ -1416,8 +1422,10 @@ def rasterize_vector_to_grid(
         transformer = None
         with fiona.open(str(input_path)) as src:
             src_crs = src.crs_wkt or "EPSG:4326"
-            if src_crs != grid.crs:
-                transformer = pyproj.Transformer.from_crs(src_crs, grid.crs, always_xy=True)
+            if pyproj.CRS(src_crs) != pyproj.CRS(grid.crs):
+                transformer = pyproj.Transformer.from_crs(
+                    src_crs, grid.crs, always_xy=True, allow_ballpark=True,
+                )
 
             clip_geom = grid.clip_geometry if grid.clip_geometry is not None else box(xmin, ymin, xmax, ymax)
 
@@ -1496,8 +1504,12 @@ def harmonize_vector(
                 clip_geom = grid.clip_geometry
                 with fiona.open(str(input_path)) as src_file:
                     src_crs = src_file.crs_wkt or "EPSG:4326"
-                if src_crs != grid.crs:
-                    transformer = pyproj.Transformer.from_crs(grid.crs, src_crs, always_xy=True)
+                _src_crs_obj = pyproj.CRS(src_crs)
+                _grid_crs_obj = pyproj.CRS(grid.crs)
+                if _src_crs_obj != _grid_crs_obj:
+                    transformer = pyproj.Transformer.from_crs(
+                        _grid_crs_obj, _src_crs_obj, always_xy=True, allow_ballpark=True,
+                    )
                     clip_geom = shapely_transform(transformer.transform, clip_geom)
                 clip_file = Path(tmpdir) / "clip_boundary.geojson"
                 write_geometry_to_geojson(clip_geom, src_crs, clip_file)
@@ -1508,7 +1520,9 @@ def harmonize_vector(
             xmin, ymin, xmax, ymax = grid.extent
             with fiona.open(str(input_path)) as src_file:
                 src_crs = src_file.crs_wkt or "EPSG:4326"
-            if src_crs != grid.crs:
+            _src_crs_obj = pyproj.CRS(src_crs)
+            _grid_crs_obj = pyproj.CRS(grid.crs)
+            if _src_crs_obj != _grid_crs_obj:
                 from rasterio.warp import transform_bounds
                 xmin, ymin, xmax, ymax = transform_bounds(grid.crs, src_crs, xmin, ymin, xmax, ymax)
             ogr_kwargs["spat"] = (xmin, ymin, xmax, ymax)
@@ -1533,8 +1547,12 @@ def harmonize_vector(
         with fiona.open(str(input_path)) as src:
             src_crs = src.crs_wkt or "EPSG:4326"
             src_schema = src.schema.copy()
-            if src_crs != grid.crs:
-                transformer = pyproj.Transformer.from_crs(src_crs, grid.crs, always_xy=True)
+            _src_obj = pyproj.CRS(src_crs)
+            _dst_obj = pyproj.CRS(grid.crs)
+            if _src_obj != _dst_obj:
+                transformer = pyproj.Transformer.from_crs(
+                    _src_obj, _dst_obj, always_xy=True, allow_ballpark=True,
+                )
 
             clip_geom = grid.clip_geometry if grid.clip_geometry is not None else box(*grid.extent)
 
@@ -1712,7 +1730,6 @@ def _create_visualization_impl(
 ) -> Path:
     """Internal implementation of PNG visualization creation."""
     _log("Creating static PNG visualization...", verbose)
-    _load_color_map_from_output_dir(output_path)
 
     from matplotlib.gridspec import GridSpec
     from matplotlib.patches import FancyBboxPatch, Patch
@@ -1862,6 +1879,8 @@ def _create_visualization_impl(
 
             vmin = style["vmin"] if style["vmin"] is not None else np.nanmin(data)
             vmax = style["vmax"] if style["vmax"] is not None else np.nanmax(data)
+            if vmin == vmax:
+                vmax = vmin + 1
             unique_vals = np.unique(data[data > 0])
             is_categorical = len(unique_vals) > 20
             masked_data = np.ma.masked_equal(data, 0)
@@ -1961,6 +1980,8 @@ def _create_visualization_impl(
             else:
                 vmin = style["vmin"] if style["vmin"] is not None else np.nanmin(data)
                 vmax = style["vmax"] if style["vmax"] is not None else np.nanmax(data)
+                if vmin == vmax:
+                    vmax = vmin + 1
                 masked_data = np.ma.masked_equal(data, 0)
                 unique_vals = np.unique(data[data > 0])
 
@@ -2379,7 +2400,6 @@ def _create_interactive_visualization_impl(
 ) -> folium.Map:
     """Internal implementation of interactive visualization creation."""
     _log("Creating interactive HTML visualization (this may take several minutes for large layers)...", verbose)
-    _load_color_map_from_output_dir(output_path)
 
     xmin, ymin, xmax, ymax = target_extent
     center_lat = (ymin + ymax) / 2
@@ -2537,9 +2557,15 @@ def _create_interactive_visualization_impl(
                     import matplotlib.cm as cm
                     from matplotlib.colors import BoundaryNorm, ListedColormap, Normalize
 
-                    vmin = style["vmin"] if style["vmin"] is not None else float(np.nanmin(data[data > 0]))
+                    _pos = data[data > 0]
+                    if _pos.size == 0:
+                        _log(f"  Skipping empty raster layer: {name}", verbose)
+                        continue
+                    vmin = style["vmin"] if style["vmin"] is not None else float(np.nanmin(_pos))
                     vmax = style["vmax"] if style["vmax"] is not None else float(np.nanmax(data))
-                    unique_vals = np.unique(data[data > 0])
+                    if vmin == vmax:
+                        vmax = vmin + 1
+                    unique_vals = np.unique(_pos)
                     is_categorical = len(unique_vals) > 20
 
                     if style.get("color_map"):
