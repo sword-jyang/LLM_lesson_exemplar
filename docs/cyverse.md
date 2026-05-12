@@ -242,7 +242,8 @@ For **Model ID**, pick one of the following models:
 - `nrp/qwen3-small`
 - `nrp/minimax-m2`
 - `js2/gpt-oss-120b`
-
+- `js2/glm-4-7-flash`
+  
 All the other settings can remain unchanged.
 
 If you want a deeper comparison of model options and tradeoffs, see [Available Models](available-models.md).
