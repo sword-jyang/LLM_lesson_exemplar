@@ -734,6 +734,35 @@ body[data-md-color-scheme="slate"] .md-main {
   margin-bottom: 0.6rem;
 }
 
+.title-slide-qr {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 1.25rem;
+  max-width: 12rem;
+}
+
+.title-slide-qr img {
+  display: block;
+  width: min(11rem, 32vw);
+  border: 0.35rem solid #ffffff;
+  border-radius: 0.35rem;
+  box-shadow: 0 0.55rem 1.4rem rgba(22, 26, 25, 0.12);
+}
+
+.title-slide-qr a {
+  display: block;
+}
+
+.title-slide-qr p {
+  margin: 0;
+  color: var(--esiil-primary-blue, #234A65);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
 .slide-nav-links {
   display: flex;
   flex-wrap: wrap;

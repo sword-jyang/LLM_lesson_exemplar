@@ -14,6 +14,12 @@ Presenter mode shows one slide at a time. Use the left and right arrow keys to m
 # AI Summit Lesson
 ## ESIIL Summit 2026
 ### Using LLMs to Harmonize Data
+<div class="title-slide-qr">
+  <a href="https://cu-esiil.github.io/LLM_lesson_exemplar/slides/">
+    <img src="assets/images/slides/slides-qr-code.svg" alt="QR code linking to the AI Summit Lesson slideshow">
+  </a>
+  <p>Scan for the slideshow</p>
+</div>
 </section>
 <section class="lesson-slide section-slide" markdown>
 # Part 1
@@ -23,12 +29,15 @@ Presenter mode shows one slide at a time. Use the left and right arrow keys to m
 # Outline
 ## Part 1: Intro
 20–25 minutes
+
 1. AI is not a monolith
 2. What are LLMs?
 3. What is an agent?
 4. Your choices as a user
+
 ## Part 2: Geospatial Harmonization with an LLM Agent
 90 minutes
+
 1. Framing the problem
 2. Colorado fire example
 3. Auditing the output
@@ -45,14 +54,18 @@ The important point for this lesson is simple:
 # What is an LLM?
 A large language model is a stochastic generator. It predicts and produces text, code, and structured outputs from patterns in data.
 LLMs are useful for:
+
 - reasoning about structure,
 - making decisions across messy inputs,
 - translating between formats,
 - and asking the right questions.
+
 LLMs are weak at:
+
 - exact computation,
 - guaranteed factual recall,
 - and knowing things outside their training or context.
+
 The fix is not to trust them blindly.
 **The fix is to give them tools.**
 </section>
@@ -73,9 +86,11 @@ Commercial frontier model, open-weights model, or local model.
 ## Where does it run?
 Cloud API, institutional server, or your own machine.
 ## Why this matters
+
 - **Privacy:** does your data leave your machine?
 - **Environmental footprint:** energy and water use vary across providers. Some report this, some do not.
 - **Reproducibility and governance:** who owns the interaction log? Can you audit what happened?
+
 You have a choice, and you should be mindful about it.
 </section>
 <section class="lesson-slide section-slide" markdown>
@@ -95,11 +110,14 @@ The question for this lesson is:
 <section class="lesson-slide" markdown>
 # Example: Colorado fire risk
 The reference workflow harmonizes four datasets:
+
 - FBFM40 fuel models: raster
 - MACAv2 winter precipitation through OPeNDAP: raster
 - MTBS fire perimeters: vector
 - Microsoft building footprints: vector, rasterized for analysis
+
 The goal is to process these data to:
+
 - EPSG:4326,
 - the Colorado boundary,
 - and a shared raster resolution of approximately 270 meters.
@@ -108,9 +126,11 @@ The goal is to process these data to:
 # Audit the output
 How do you know the agent did the right thing?
 Start with the outputs:
+
 - a static PNG map,
 - an interactive HTML map,
 - and `PROMPT_ACTION_LOG.md`.
+
 The action log records every run, every decision, and every dataset URL.
 The agent is designed to ask before acting on ambiguous decisions. That is a feature, not a limitation.
 Verify the output. If it is not what you expect, explain that clearly to the LLM.
@@ -120,10 +140,12 @@ LLMs cannot read your mind. You need to provide clear instructions.
 # Bring your own data
 Open the repository in CyVerse and test the workflow with datasets from your own research domain.
 You provide:
+
 - dataset names and descriptions,
 - dataset download URLs,
 - desired harmonization outputs such as projection, extent, and resolution,
 - and specific plotting instructions, such as the color for each layer.
+
 Dataset URLs are often the biggest point of failure. If a URL is broken, private, or points to a page rather than a downloadable data object, the workflow may fail.
 You can also reference data URLs that the chatbot already has from the ESIIL data library.
 </section>
