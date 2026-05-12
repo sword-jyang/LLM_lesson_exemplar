@@ -1183,10 +1183,12 @@ def resolve_clip_boundary(
             for feat in src:
                 geoms.append(shapely_shape(feat["geometry"]))
 
-        # Reproject if needed
-        if pyproj.CRS(src_crs) != pyproj.CRS(target_crs):
+        # Reproject if needed (skip when both are geographic — NAD83/WGS84 < 2 m)
+        _s = pyproj.CRS(src_crs)
+        _d = pyproj.CRS(target_crs)
+        if _s != _d and not (_s.is_geographic and _d.is_geographic):
             transformer = pyproj.Transformer.from_crs(
-                src_crs, target_crs, always_xy=True, allow_ballpark=True,
+                _s, _d, always_xy=True, allow_ballpark=True,
             )
             geoms = [shapely_transform(transformer.transform, g) for g in geoms]
 
@@ -1378,10 +1380,12 @@ def rasterize_vector_to_grid(
 
             _src_crs_obj = pyproj.CRS(src_crs)
             _grid_crs_obj = pyproj.CRS(grid.crs)
+            _needs_reproject = (_src_crs_obj != _grid_crs_obj
+                                and not (_src_crs_obj.is_geographic and _grid_crs_obj.is_geographic))
             if grid.clip_geometry is not None:
                 _log("  Clipping vector to boundary polygon", verbose)
                 clip_geom = grid.clip_geometry
-                if _src_crs_obj != _grid_crs_obj:
+                if _needs_reproject:
                     transformer = pyproj.Transformer.from_crs(
                         _grid_crs_obj, _src_crs_obj, always_xy=True, allow_ballpark=True,
                     )
@@ -1390,7 +1394,7 @@ def rasterize_vector_to_grid(
                 write_geometry_to_geojson(clip_geom, src_crs, clip_file)
                 ogr_kwargs["clipsrc"] = str(clip_file)
             else:
-                if _src_crs_obj != _grid_crs_obj:
+                if _needs_reproject:
                     from rasterio.warp import transform_bounds
                     spat = transform_bounds(grid.crs, src_crs, xmin, ymin, xmax, ymax)
                 else:
@@ -1422,7 +1426,9 @@ def rasterize_vector_to_grid(
         transformer = None
         with fiona.open(str(input_path)) as src:
             src_crs = src.crs_wkt or "EPSG:4326"
-            if pyproj.CRS(src_crs) != pyproj.CRS(grid.crs):
+            _s = pyproj.CRS(src_crs)
+            _d = pyproj.CRS(grid.crs)
+            if _s != _d and not (_s.is_geographic and _d.is_geographic):
                 transformer = pyproj.Transformer.from_crs(
                     src_crs, grid.crs, always_xy=True, allow_ballpark=True,
                 )
@@ -1506,7 +1512,9 @@ def harmonize_vector(
                     src_crs = src_file.crs_wkt or "EPSG:4326"
                 _src_crs_obj = pyproj.CRS(src_crs)
                 _grid_crs_obj = pyproj.CRS(grid.crs)
-                if _src_crs_obj != _grid_crs_obj:
+                _needs_reproject = (_src_crs_obj != _grid_crs_obj
+                                    and not (_src_crs_obj.is_geographic and _grid_crs_obj.is_geographic))
+                if _needs_reproject:
                     transformer = pyproj.Transformer.from_crs(
                         _grid_crs_obj, _src_crs_obj, always_xy=True, allow_ballpark=True,
                     )
@@ -1522,7 +1530,9 @@ def harmonize_vector(
                 src_crs = src_file.crs_wkt or "EPSG:4326"
             _src_crs_obj = pyproj.CRS(src_crs)
             _grid_crs_obj = pyproj.CRS(grid.crs)
-            if _src_crs_obj != _grid_crs_obj:
+            _needs_reproject = (_src_crs_obj != _grid_crs_obj
+                                and not (_src_crs_obj.is_geographic and _grid_crs_obj.is_geographic))
+            if _needs_reproject:
                 from rasterio.warp import transform_bounds
                 xmin, ymin, xmax, ymax = transform_bounds(grid.crs, src_crs, xmin, ymin, xmax, ymax)
             ogr_kwargs["spat"] = (xmin, ymin, xmax, ymax)
@@ -1549,7 +1559,7 @@ def harmonize_vector(
             src_schema = src.schema.copy()
             _src_obj = pyproj.CRS(src_crs)
             _dst_obj = pyproj.CRS(grid.crs)
-            if _src_obj != _dst_obj:
+            if _src_obj != _dst_obj and not (_src_obj.is_geographic and _dst_obj.is_geographic):
                 transformer = pyproj.Transformer.from_crs(
                     _src_obj, _dst_obj, always_xy=True, allow_ballpark=True,
                 )

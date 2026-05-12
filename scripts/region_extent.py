@@ -146,24 +146,17 @@ def _reproject_geometry(geom, src_crs: str, dst_crs: str):
     dst = pyproj.CRS(dst_crs)
     if src == dst:
         return geom
+    # Skip transform when both CRSes are geographic (e.g. NAD83 ↔ WGS84).
+    # The offset is < 2 m, and some PROJ configurations produce inf when
+    # datum grids are missing, corrupting the geometry entirely.
+    if src.is_geographic and dst.is_geographic:
+        return geom
     transformer = pyproj.Transformer.from_crs(
         src, dst, always_xy=True, allow_ballpark=True,
     )
     result = shapely_transform(transformer.transform, geom)
-    # Validate: some PROJ configurations produce inf when datum grids are
-    # missing.  Fall back to the original geometry if the CRSes are both
-    # geographic (NAD83 ↔ WGS84 differs by < 2 m, safe to skip).
-    bounds = result.bounds
     import math
-    if any(math.isinf(v) or math.isnan(v) for v in bounds):
-        if src.is_geographic and dst.is_geographic:
-            print(
-                f"Warning: reprojection {src.to_epsg()} → {dst.to_epsg()} "
-                f"produced invalid bounds — using original coordinates "
-                f"(NAD83/WGS84 offset is < 2 m)",
-                file=sys.stderr,
-            )
-            return geom
+    if any(math.isinf(v) or math.isnan(v) for v in result.bounds):
         sys.exit(
             f"Reprojection from {src_crs} to {dst_crs} produced invalid bounds. "
             f"Check that PROJ datum grids are installed."
