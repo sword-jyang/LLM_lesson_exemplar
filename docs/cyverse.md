@@ -110,10 +110,6 @@ This is the working folder used in the current training image.
 
 *Opening the interactive VS Code workspace.*
 
-![Screenshot showing the New Terminal menu item inside VS Code.](assets/images/cyverse/cyverse-07-terminal.png)
-
-*Opening a terminal inside the CyVerse workspace.*
-
 
 ## Step 3: Configure Roo and model credentials
 
