@@ -46,7 +46,7 @@ For the current workshop:
 
 Use the direct launch link for this workshop. It opens the correct CyVerse app, so you do not need to search for the application manually.
 
-<a href="https://de.cyverse.org/instantlaunch/75a5a13e-7980-11f0-b7e6-008cfa5ae621" target="_blank" rel="noopener noreferrer"><img src="https://de.cyverse.org/Powered-By-CyVerse-blue.svg" alt="Launch this workshop environment in CyVerse"></a>
+<a href="https://de.cyverse.org/apps/de/c0956b30-3f32-11f0-9712-008cfa5ae621/launch" target="_blank" rel="noopener noreferrer"><img src="https://de.cyverse.org/Powered-By-CyVerse-blue.svg" alt="Launch this workshop environment in CyVerse"></a>
 
 If CyVerse asks you to sign in, log in with your CyVerse account and continue with the launch.
 
@@ -55,7 +55,7 @@ On the launch page:
 1. Confirm that the app is the ESIIL OASIS training environment.
 2. Ensure the container image **Version** is `Innovation_Summit_2026`.
 3. Name the analysis, decide where you want it saved, and complete the remaining analysis information fields.
-4. In **Advanced Settings**, select **4** or **8 CPU Cores**. Start with **4**, but if you run out of memory, select **8** in the future.
+4. In **Advanced Settings**, select **8 CPU Cores** and **64GB for Minimum Memory**. 
 5. Click **Launch Analysis**, **Run**, or the final launch button shown by CyVerse.
 
 ![Screenshot showing the ESIIL_OASIS launch page with Version 4.5 selected.](assets/images/cyverse/cyverse-04-launch-version.png)
@@ -64,7 +64,7 @@ On the launch page:
 
 ![Screenshot showing the Advanced Settings CPU Cores dropdown with 4 and 8 highlighted.](assets/images/cyverse/cyverse-04-cpu-cores.png)
 
-*Select 4 or 8 CPU Cores in Advanced Settings.*
+*Select 8 CPU Cores and 64GB Minimum Memory in Advanced Settings.*
 
 ??? info "If the direct launch link is not working"
     Use the longer CyVerse navigation path:
